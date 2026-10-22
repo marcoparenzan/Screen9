@@ -1,5 +1,7 @@
 ﻿# Roadmap
 
+> This is the log of what has been done and the early list of possible steps. Where the project is going now: [ROADMAP.md](../../ROADMAP.md) in the repository root.
+
 ## Implemented
 
 - [x] A .NET 10 XY cell canvas.

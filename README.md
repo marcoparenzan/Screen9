@@ -1,7 +1,19 @@
+<p align="center">
+  <img src="src/Screen9.Web/wwwroot/images/screen9-logo-v2.png" alt="Screen9" width="520">
+</p>
+
 # Screen9
 
 A .NET engine for games with a retro flavour but a modern build, born from QBasic and its `SCREEN 9`.
 Its emblem is Gorilla: the same game written in C#, in QBasic and in Python, on the same engine.
+
+Read the [story](HISTORY.md) and the [roadmap](ROADMAP.md), browse the [documentation](DOCUMENTATION.md), or jump to the [quick start](USAGE.md). Comments and bugs: [GitHub Issues](https://github.com/marcoparenzan/Screen9/issues).
+
+<p align="center">
+  <img src="docs/images/gorillas-city.png" alt="Gorillas in mode 9" width="31%">
+  <img src="docs/images/rallyx-play.png" alt="Rally-X in mode 12" width="31%">
+  <img src="docs/images/plasma.png" alt="Plasma in mode 13" width="31%">
+</p>
 
 ## The parts
 
@@ -21,7 +33,7 @@ QBSharp uses the engine as a project reference: no intermediate packages.
 samples/
   csharp/Gorilla/     Gorillas in C# (file-based app, only Gorillas.cs on top of the engine)
   csharp/RallyX/      Rally-X in C# (mode 12, 16 colours): a second game on the engine, also on the site (/rally-x)
-  csharp/Demos/       engine demos: cell scene, VGA plasma, smoke test on a real Console
+  csharp/Demos/       engine demos: cell scene, VGA plasma, smoke test on a real Console (also on the site)
   qbsharp/Gorilla/    the original GORILLA.BAS (Microsoft 1990), run by qbs
   qbsharp/*.bas       language samples and tests
   csharp/Gorilla/gorillas.csx   Gorillas as a C# script (ops/csx.cs, or Monaco / the web page)
@@ -55,5 +67,7 @@ Run the QBSharp tests from PowerShell or cmd: under Git Bash some terminal tests
 - Engine: [docs/engine](docs/engine/README.md) (formerly ConsoleLib).
 - QBSharp: [docs/qbsharp](docs/qbsharp/README.md).
 - Web: [docs/web](docs/web/README.md).
+- Everything, indexed: [DOCUMENTATION.md](DOCUMENTATION.md); the story: [HISTORY.md](HISTORY.md); where it is going: [ROADMAP.md](ROADMAP.md).
+- Screenshots of the games and demos, ready to reuse, are in [docs/images](docs/images) (`dotnet run ops/make-screenshots.cs` renders them again).
 
 The device subsystem (pixel window, raster text, `PLAY` and speaker, keyboard, `GET`/`PUT` sprites) lives in the engine: QBSharp and the C# Gorilla use the same types (`PixelWindow`, `PCTextDisplay`, `PCMusic`/`PCSpeaker`, `PCKeyboard`, `PCSprite`), and the Python Gorilla imports them from PySharp's `screen9` package.

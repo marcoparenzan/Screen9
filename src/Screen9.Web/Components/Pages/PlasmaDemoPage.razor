@@ -1,0 +1,58 @@
+@page "/plasma-demo"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using Screen9.Demos
+
+<PageTitle>Plasma demo — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-3 p-4">
+    <h1 class="text-xl font-bold text-pc-white">Plasma — VGA mode 13</h1>
+    <p class="text-sm text-pc-gray">
+        The classic plasma on a VGA mode 13 canvas (320×200, 256 colours): the picture never changes, only the palette does —
+        <code class="text-pc-yellow">SetDac</code> shifts a hue ramp over 240 colours every frame — and a ball bounces on top, drawn with
+        <code class="text-pc-yellow">PutImage</code>. Double-buffered with <code class="text-pc-yellow">ManualPresent</code>, the whole
+        plasma written with one <code class="text-pc-yellow">PutPixels</code> call. The same code runs in a terminal (<code class="text-pc-yellow">dotnet run --project samples/csharp/Demos -- --vga</code>).
+    </p>
+    <PixelDisplay @ref="display" />
+    <details class="rounded border border-pc-darkgray p-3">
+        <summary class="cursor-pointer text-sm font-bold text-pc-white">The code (PlasmaDemo.cs)</summary>
+        <pre class="mt-2 max-h-[32rem] overflow-auto text-xs text-pc-gray">@listing</pre>
+    </details>
+</div>
+
+@code {
+    private PixelDisplay? display;
+    private readonly CancellationTokenSource cts = new();
+    private Task? runTask;
+    private string listing = "";
+
+    protected override void OnInitialized()
+        => listing = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "samples", "PlasmaDemo.cs")); // bundled read-only, see csproj
+
+    // Not OnInitialized: that runs before the first render, before <PixelDisplay @ref> is assigned.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) runTask = Task.Run(() => RunAsync(cts.Token));
+    }
+
+    private async Task RunAsync(CancellationToken token)
+    {
+        var demo = new PlasmaDemo();
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                demo.Step();
+                display?.PresentGraphics(demo.Canvas);
+                await Task.Delay(33, token); // ~30 frames a second
+            }
+        }
+        catch (OperationCanceledException) { } // circuit disposed
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        cts.Cancel();
+        if (runTask is not null) { try { await runTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
+    }
+}

@@ -13,6 +13,7 @@
     <ProjectReference Include="../QBSharp.Cli/QBSharp.Cli.csproj" />
     <ProjectReference Include="../../samples/csharp/Gorilla/GorillasCore.csproj" />
     <ProjectReference Include="../../samples/csharp/RallyX/RallyXCore.csproj" />
+    <ProjectReference Include="../../samples/csharp/Demos/Core/Screen9.DemosCore.csproj" />
     <ProjectReference Include="../Screen9.Scripting/Screen9.Scripting.csproj" />
     <!-- PySharp (Python in C#), from ../../LocalFeed (see LocalFeed/README.md), for the Python Gorillas page. -->
     <PackageReference Include="PySharp.Interpreter" Version="2.5.0" />
@@ -25,6 +26,8 @@
     <None Include="../../samples/python/Gorilla/gorillas.py" Link="samples/gorillas.py" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../samples/csharp/Gorilla/gorillas.csx" Link="samples/gorillas.csx" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../samples/csharp/Gorilla/GorillasCore.cs" Link="samples/GorillasCore.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/csharp/Demos/Core/PlasmaDemo.cs" Link="samples/PlasmaDemo.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/csharp/Demos/Core/SceneDemo.cs" Link="samples/SceneDemo.cs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Tailwind CSS: built by the standalone CLI (no Node/npm dependency), run with `dotnet build`/`watch`.

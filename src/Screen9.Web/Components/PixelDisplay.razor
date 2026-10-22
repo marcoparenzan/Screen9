@@ -5,6 +5,9 @@
 @inject IJSRuntime JS
 
 <canvas @ref="canvasElement" class="mx-auto block max-h-[70vh] max-w-full bg-pc-black [image-rendering:pixelated]"></canvas>
+<div class="text-center text-xs">
+    <button type="button" @onclick="SaveAsync" title="Download the screen as a PNG" class="text-pc-brightcyan underline hover:text-pc-yellow">Save PNG</button>
+</div>
 
 @code {
     /// <summary>~30 Hz, the same cap PixelWindow/EditorFrameMailbox use: skip frames closer together than this.</summary>
@@ -45,6 +48,13 @@
 
     [JSInvokable]
     public async Task HandleKeyDown(BrowserKeyEvent e) => await OnKeyDown.InvokeAsync(e);
+
+    /// <summary>Downloads the frame now on the screen as a PNG (native pixels), to reuse it.</summary>
+    public async Task SaveAsync()
+    {
+        if (pixelCanvas is null || disposed) return;
+        try { await pixelCanvas.InvokeVoidAsync("save"); } catch (JSDisconnectedException) { }
+    }
 
     /// <summary>Gives the keyboard to this screen (e.g. when a program dialog opens over the page).</summary>
     public async Task FocusAsync()

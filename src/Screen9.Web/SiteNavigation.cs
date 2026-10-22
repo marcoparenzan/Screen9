@@ -21,6 +21,7 @@ public static class SiteNavigation
             new("Home", "/"),
             new("Mode 9 history", "/history", "From QBasic's SCREEN 9 to the engine and the web"),
             new("Library", "/library", "Coding Guide", "/libreria"),
+            new("Roadmap", "/roadmap", "Mode 13, sprites, more games, speed"),
         ]),
         new("Gorilla Scripted",
         [
@@ -34,6 +35,11 @@ public static class SiteNavigation
         [
             new("Gorillas", "/gorillas-csharp"),
             new("Rally-X", "/rally-x", "Work in progress"),
+        ]),
+        new("C# Demos",
+        [
+            new("Plasma (mode 13)", "/plasma-demo", "VGA palette cycling"),
+            new("Scene (cell canvas)", "/scene-demo", "The terminal model"),
         ]),
     ];
 

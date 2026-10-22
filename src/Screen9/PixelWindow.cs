@@ -70,8 +70,8 @@ public sealed class PixelWindow : IPixelDisplay
     private readonly Func<long> ticks;
     private readonly int windowWidth,windowHeight;
     private static bool dpiAware;
-    /// <summary>Senza, su uno schermo con scala al 125-200% Windows ingrandisce la finestra come bitmap (sfocata, pixel irregolari):
-    /// dichiarata la consapevolezza del DPI, il client è in pixel fisici e la scala intera ha senso.</summary>
+    /// <summary>Without it, on a display scaled to 125-200% Windows enlarges the window as a bitmap (blurred, uneven pixels):
+    /// once DPI awareness is declared, the client area is in physical pixels and whole-multiple scaling makes sense.</summary>
     private static void MakeDpiAware()
     {
         if(dpiAware)return;

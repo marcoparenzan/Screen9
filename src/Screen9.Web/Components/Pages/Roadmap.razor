@@ -1,0 +1,59 @@
+@page "/roadmap"
+
+<PageTitle>Roadmap — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-12">
+    <header class="flex flex-col gap-3">
+        <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">Screen9 · Roadmap</div>
+        <h1 class="text-3xl font-bold text-pc-white">Where Screen9 is going</h1>
+        <p class="text-pc-gray">
+            Four directions. The "next" items are plans, not promises. The detailed version, with what exists today, is
+            <a href="https://github.com/marcoparenzan/Screen9/blob/HEAD/ROADMAP.md" class="text-pc-brightcyan underline hover:text-pc-yellow">ROADMAP.md</a>
+            in the repository; ideas and requests are welcome on
+            <a href="https://github.com/marcoparenzan/Screen9/issues" class="text-pc-brightcyan underline hover:text-pc-yellow">GitHub Issues</a>.
+        </p>
+    </header>
+
+    <section class="flex flex-col gap-2">
+        <h2 class="text-xl font-bold text-pc-white">1 · Mode 13</h2>
+        <p class="text-sm">VGA 320×200 with 256 colours and a programmable palette. It works today (the <a href="/plasma-demo" class="text-pc-brightcyan underline hover:text-pc-yellow">plasma demo</a>).</p>
+        <ul class="list-disc pl-5 text-sm">
+            <li>A small library of effects: fire, starfield, tunnel, scroller.</li>
+            <li>Palette helpers: fades, rotations, gradients.</li>
+            <li>A first game in mode 13.</li>
+        </ul>
+    </section>
+
+    <section class="flex flex-col gap-2">
+        <h2 class="text-xl font-bold text-pc-white">2 · Sprites</h2>
+        <p class="text-sm">Today: <code class="text-pc-yellow">GetImage</code>/<code class="text-pc-yellow">PutImage</code> and QBasic's <code class="text-pc-yellow">GET</code>/<code class="text-pc-yellow">PUT</code> buffers.</p>
+        <ul class="list-disc pl-5 text-sm">
+            <li>A real sprite layer: sprite sheets, named animations, flip, draw order.</li>
+            <li>An indexed-PNG loader, so art needs no converter script.</li>
+            <li>Collision helpers (bounding boxes, then pixel masks) and nearest-neighbour scaling and rotation.</li>
+        </ul>
+    </section>
+
+    <section class="flex flex-col gap-2">
+        <h2 class="text-xl font-bold text-pc-white">3 · More games</h2>
+        <p class="text-sm">Today: Gorillas in five forms, and <a href="/rally-x" class="text-pc-brightcyan underline hover:text-pc-yellow">Rally-X</a> (work in progress).</p>
+        <ul class="list-disc pl-5 text-sm">
+            <li>Finish Rally-X: tuning, mouse and touch, a saved high score, sound effects, a closer camera.</li>
+            <li>Nibbles, the other QBasic classic, unchanged on QBSharp and then in C#.</li>
+            <li>More programs from the QBasic archive running without changes.</li>
+        </ul>
+    </section>
+
+    <section class="flex flex-col gap-2">
+        <h2 class="text-xl font-bold text-pc-white">4 · Performance improvements</h2>
+        <p class="text-sm">Today: a 640×480 frame in about 5 ms with <code class="text-pc-yellow">PutPixels</code>; the games run at 30 frames a second.</p>
+        <ul class="list-disc pl-5 text-sm">
+            <li><code class="text-pc-yellow">PutImage</code>, <code class="text-pc-yellow">Box</code> and fills on the fast path, instead of pixel by pixel.</li>
+            <li>Planar video memory updated eight pixels at a time.</li>
+            <li>A faster interpreter for the hot statements of QBasic programs.</li>
+            <li>Optimised Debug builds (the engine is several times slower unoptimised).</li>
+            <li>Lighter frames to the browser: only what changed.</li>
+            <li>Open: the QBasic editor on the site has been reported slow; the cause is not found yet.</li>
+        </ul>
+    </section>
+</div>

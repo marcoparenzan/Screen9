@@ -12,7 +12,7 @@ pwsh src/Screen9.Web/tools/fetch-tailwind.ps1
 dotnet run --project src/Screen9.Web
 ```
 
-The site is in English. The header has three drop-down menus, all read from `SiteNavigation.cs`: **Screen9** (hangs from the logo: Home, Mode 9 history, Library), **Gorilla Scripted** (Gorillas as QBasic, Python and C# script, plus the QBasic and Monaco editors) and **C# Games** (Gorillas, Rally-X, marked work in progress). On every page a navigation panel beside the content (above it on narrow screens) lists the pages of the same section with the current one highlighted. The header also links to the GitHub repository. A test checks that every menu entry is a real page and every page is in the menu.
+The site is in English. The header has three drop-down menus, all read from `SiteNavigation.cs`: **Screen9** (hangs from the logo: Home, Mode 9 history, Library), **Gorilla Scripted** (Gorillas as QBasic, Python and C# script, plus the QBasic and Monaco editors) and **C# Games** (Gorillas, Rally-X, marked work in progress) and **C# Demos** (the plasma and the cell-canvas scene). The Screen9 menu also has the Roadmap. On every page a navigation panel beside the content (above it on narrow screens) lists the pages of the same section with the current one highlighted. The header also links to the GitHub repository. A test checks that every menu entry is a real page and every page is in the menu.
 
 Pages, reachable from the home page (`/` is the introduction, `/history` tells the story of the project, `/library` is the Coding Guide with snippets for mode 9, the old `/libreria` still works):
 
@@ -23,6 +23,9 @@ Pages, reachable from the home page (`/` is the introduction, `/history` tells t
 - **`/gorillas-python`** — `samples/python/Gorilla/gorillas.py`, the same file as `pysharp run`, run by
   PySharp embedded in the server (`PySharp.Interpreter` from `LocalFeed/`): the site passes the screen, the keyboard and
   the speaker as the `web_host` variable (`PythonGameHost`), and an in-memory `screen9` module on top of the engine.
+- **`/history`**, **`/library`**, **`/roadmap`** — the Mode 9 history, the Coding Guide (runnable mode 9 snippets), and the roadmap.
+- **`/plasma-demo`**, **`/scene-demo`** — the demos of `samples/csharp/Demos` (`Screen9.DemosCore`): a VGA mode 13 plasma with palette cycling, and the
+  cell canvas. Each page shows the code.
 - **`/rally-x`** — `samples/csharp/RallyX`: Rally-X in C# (`RallyXGame`, the same as the desktop one), mode 12 at 640×480 and 16 colours.
   Arrows or WASD, Space for smoke, P to pause. See [samples/csharp/RallyX/README.md](../../samples/csharp/RallyX/README.md).
 - **`/gorillas-csx`** — `samples/csharp/Gorilla/gorillas.csx`, the game as a C# script, compiled and run by
@@ -56,6 +59,12 @@ Pages, reachable from the home page (`/` is the introduction, `/history` tells t
   layout. JavaScript organised in ES6 classes (`PixelCanvas`, `KeyCapture`, `ToneBeeper`,
   `MonacoHost`), not loose functions.
 
+## Screens and comments
+
+Every screen has a **Save PNG** button under it: it downloads the frame as it is on the screen (native pixels, for example 640×350 in mode 9) so it can
+be reused. Ready-made screenshots, in two versions (native, and 1280×960 at 4:3), are in `docs/images`, rendered by `ops/make-screenshots.cs`.
+The footer of every page links to the repository's GitHub Issues, which is where comments and bug reports go.
+
 ## Security: code run by the server
 
 Python and C# written by the user in Monaco run in the server process with its permissions (files, processes, network):
@@ -83,6 +92,27 @@ before exposing the site a sandbox must be chosen, or only the fixed code left.
   what was verified here is the build, the automated tests (mappers, `PngFrame`, `GorillasCore` parity via
   `--selftest`/`--smoke`) and that every page answers HTTP 200 without exceptions in the initial render — not
   a real interactive session.
+
+## Publishing: static files arrived empty (fixed)
+
+Symptom on the published site (Azure App Service): every static file — `reconnectModal.js`, `css/app.css`, the logo, even `_framework/blazor.web.js` — answered
+a `GET` with `200 OK`, `Content-Length: 0` and no other header, while pages (HTML) arrived fine. The browser reported
+`Failed to find a valid digest in the 'integrity' attribute ... reconnectModal.*.js`: `47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=` is simply the SHA-256 of an empty file.
+The site was unstyled and not interactive.
+
+Cause: `Program.cs` changed the process working directory (to a scratch folder, for the editor's Open dialog) **before** `WebApplication.CreateBuilder`. The content
+root — and with it `wwwroot` and `appsettings.json` — comes from the working directory at that moment, so a published site looked for its files in the scratch
+folder. It went unnoticed because in Development (`dotnet run`, Visual Studio) the static files come from absolute paths in the build manifest. Neither Azure,
+IIS, the hosting model nor the way the site is deployed (FTP, Web Deploy, Zip Deploy) had anything to do with it.
+
+Fix: the builder is created first, the working directory is changed after it. And outside Development the site now refuses to start, with a message
+naming the content root, if `wwwroot` is not there, instead of serving empty files.
+
+How it was found, in case it comes back: the same published output (`dotnet publish`, run with `ASPNETCORE_ENVIRONMENT=Production`) reproduced it on plain Kestrel
+and under IIS Express in-process (both gave 0 bytes), so it was not Azure; the log showed `appsettings.json` was not being read either. After the fix both serve the
+files with the right bytes and the right `ETag`. When testing static files with curl, download to a file (`-o file`) and look at its size.
+
+The `/favicon.ico` 404 in the console is fixed too (a favicon from the logo is part of the site).
 
 ## Future ideas, not built here
 

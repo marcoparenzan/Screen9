@@ -9,6 +9,7 @@ export class PixelCanvas {
     }
 
     async drawPng(bytes) {
+        this.lastPng = bytes; // kept so the screen can be saved as it is
         const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
         if (this.canvas.width !== bitmap.width || this.canvas.height !== bitmap.height) {
             this.canvas.width = bitmap.width;
@@ -16,6 +17,19 @@ export class PixelCanvas {
         }
         this.ctx.drawImage(bitmap, 0, 0);
         bitmap.close();
+    }
+
+    /** Downloads the frame on the screen as a PNG (its native pixels: 640×350 in mode 9). */
+    save(name) {
+        if (!this.lastPng) return;
+        const url = URL.createObjectURL(new Blob([this.lastPng], { type: 'image/png' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name || `screen9-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     dispose() { /* nothing to release: the canvas element itself is owned by Blazor */ }
