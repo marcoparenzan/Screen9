@@ -1,0 +1,11 @@
+﻿' Open with qbs edit src/examples/editor.bas, then F5.
+Dim jobName = Ui.InputBox("Nome job", "deploy")
+Dim choices = Json.Deserialize("[""dev"",""prod""]")
+Dim target = Ui.Select("Ambiente", choices)
+Dim targets = Ui.MultiSelect("Ambienti multipli (Space seleziona)", choices)
+Ui.MessageBox("Conferma job", "QBSharp")
+Print(jobName & " -> " & target)
+Print(targets.Count)
+Ui.Window("Risultato", "Job pronto")
+Ui.Table(Json.Deserialize("[{""Name"":""deploy"",""Count"":42}]"))
+Ui.Progress(100, "Editor demo")

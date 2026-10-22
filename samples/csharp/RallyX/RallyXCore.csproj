@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>RallyXCore</AssemblyName>
+    <RootNamespace>RallyX</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- RallyX.cs is a file-based app (#!/#: directives) in this same folder, not a library source file. -->
+    <Compile Remove="RallyX.cs" />
+    <EmbeddedResource Include="Assets/rallyx.assets" LogicalName="rallyx.assets" />
+    <ProjectReference Include="../../../src/Screen9/Screen9.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Version>1.0.0</Version>
+    <PackageId>Screen9</PackageId>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <Description>Canvas a celle e framebuffer PCCanvas CGA/EGA/VGA indicizzato, con renderer Windows a double buffering e renderer ANSI truecolor a mezzo blocco. Include le ROM font IBM EGA/VGA (CC BY-SA 4.0, vedi fonts/LICENSE.TXT).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="../../docs/engine/README.md" Pack="true" PackagePath="/" />
+    <EmbeddedResource Include="Fonts/ibm8x*.rom" LogicalName="Screen9.Fonts.%(Filename)%(Extension)" />
+    <None Include="Fonts/LICENSE.TXT;Fonts/SOURCE.TXT" Pack="true" PackagePath="fonts/" />
+    <!-- Licenza e attribuzione dei font copiate anche nell'output di chi usa il pacchetto (CC BY-SA: accompagnano la DLL con i font). -->
+    <None Include="Fonts/LICENSE.TXT;Fonts/SOURCE.TXT" Pack="true" PackagePath="contentFiles/any/any/Screen9.Fonts/" PackageCopyToOutput="true" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <InternalsVisibleTo Include="Screen9.Tests" />
+  </ItemGroup>
+</Project>

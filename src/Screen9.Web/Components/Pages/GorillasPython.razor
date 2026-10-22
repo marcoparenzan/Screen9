@@ -1,0 +1,62 @@
+@page "/gorillas-python"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+
+<PageTitle>Gorillas (Python) — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-3 p-4">
+    <h1 class="text-xl font-bold text-pc-white">Gorillas — Python (PySharp)</h1>
+    <p class="text-sm text-pc-gray">
+        <code class="text-pc-yellow">gorillas.py</code>, the same file that runs with
+        <code class="text-pc-yellow">pysharp run</code> on the desktop, run here by PySharp embedded in the
+        site: the same game, the same Screen9 engine devices, the browser's screen and keyboard. Click the
+        screen, then type.
+    </p>
+    <PixelDisplay @ref="display" OnKeyDown="HandleKeyDownAsync" />
+    <div class="flex flex-wrap items-center gap-4 text-sm">
+        <a href="/editor-monaco?file=gorillas.py" class="text-pc-brightcyan underline hover:text-pc-yellow">Open gorillas.py in Monaco</a>
+        @if (status is not null) { <span class="text-pc-gray">@status</span> }
+    </div>
+    <details class="rounded border border-pc-darkgray p-3">
+        <summary class="cursor-pointer text-sm font-bold text-pc-white">The code (gorillas.py)</summary>
+        <pre class="mt-2 max-h-[32rem] overflow-auto text-xs text-pc-gray">@source</pre>
+    </details>
+</div>
+
+@code {
+    private PixelDisplay? display;
+    private BrowserDisplay? screen;
+    private readonly CancellationTokenSource cts = new();
+    private Task? runTask;
+    private string? status;
+    private string source = "";
+
+    protected override void OnInitialized()
+        => source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "samples", "gorillas.py"));
+
+    // Not OnInitialized: that runs before the first render, before <PixelDisplay @ref> is assigned.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender || display is null) return;
+        screen = new BrowserDisplay(display, () => { });
+        var host = new PythonGameHost(screen, tone => display.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds), cts.Token);
+        runTask = PythonGames.RunAsync(source, "gorillas.py", host, _ => { }).ContinueWith(t =>
+        {
+            status = t.IsCompletedSuccessfully ? t.Result : "Error: " + t.Exception?.GetBaseException().Message;
+            return InvokeAsync(StateHasChanged);
+        }).Unwrap();
+    }
+
+    private Task HandleKeyDownAsync(BrowserKeyEvent e)
+    {
+        screen?.Enqueue(BrowserKeyboard.Encode(e));
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        cts.Cancel();
+        screen?.Close();
+        if (runTask is not null) { try { await runTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
+    }
+}

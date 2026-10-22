@@ -1,0 +1,27 @@
+<Solution>
+  <Folder Name="/engine/">
+    <Project Path="src/Screen9/Screen9.csproj" />
+    <Project Path="src/Screen9.Tests/Screen9.Tests.csproj" />
+  </Folder>
+  <Folder Name="/qbsharp/">
+    <Project Path="src/QBSharp.Core/QBSharp.Core.csproj" />
+    <Project Path="src/QBSharp.QBasic/QBSharp.QBasic.csproj" />
+    <Project Path="src/QBSharp.StandardLibrary/QBSharp.StandardLibrary.csproj" />
+    <Project Path="src/QBSharp.AI/QBSharp.AI.csproj" />
+    <Project Path="src/QBSharp.Cli/QBSharp.Cli.csproj" />
+    <Project Path="src/QBSharp.TerminalHarness/QBSharp.TerminalHarness.csproj" />
+    <Project Path="src/QBSharp.Benchmarks/QBSharp.Benchmarks.csproj" />
+    <Project Path="src/QBSharp.Tests/QBSharp.Tests.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/csharp/Demos/Screen9.Demo.csproj" />
+    <Project Path="samples/csharp/Gorilla/GorillasCore.csproj" />
+    <Project Path="samples/csharp/RallyX/RallyXCore.csproj" />
+    <Project Path="src/RallyX.Tests/RallyX.Tests.csproj" />
+  </Folder>
+  <Folder Name="/web/">
+    <Project Path="src/Screen9.Web/Screen9.Web.csproj" />
+    <Project Path="src/Screen9.Scripting/Screen9.Scripting.csproj" />
+    <Project Path="src/Screen9.Web.Tests/Screen9.Web.Tests.csproj" />
+  </Folder>
+</Solution>

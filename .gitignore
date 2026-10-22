@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.vs/
+.ralfai/
+ops/artifacts/
+ops/test-results/
+TestResults/
+*.user
+*.suo
+site-packages/
+src/Screen9.Web/.tailwind/

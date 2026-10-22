@@ -1,0 +1,107 @@
+@page "/library"
+@page "/libreria"
+
+<PageTitle>Library — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-12">
+    <header class="flex flex-col gap-3">
+        <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">Screen9 · Coding Guide</div>
+        <h1 class="text-3xl font-bold text-pc-white">Library</h1>
+        <p class="text-pc-gray">
+            The engine does not depend on QBasic or QBSharp: <code class="text-pc-yellow">Screen9.csproj</code> can be
+            referenced on its own, from any .NET app. The examples below use mode 9 — <code class="text-pc-yellow">SCREEN 9</code>,
+            EGA 640×350 — and each one builds and runs (they are compiled in the engine's test suite).
+        </p>
+    </header>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">Mode 9 at a glance</h2>
+        <table class="w-full text-sm">
+            <tbody class="divide-y divide-pc-darkgray">
+                <tr><td class="py-1 pr-4 text-pc-white">Resolution</td><td>640×350 pixels (<code class="text-pc-yellow">new PCCanvas(9)</code>)</td></tr>
+                <tr><td class="py-1 pr-4 text-pc-white">Colours</td><td>16 at a time, out of the EGA palette of 64</td></tr>
+                <tr><td class="py-1 pr-4 text-pc-white">Pages</td><td>2 (<code class="text-pc-yellow">ActivePage</code> to draw on, <code class="text-pc-yellow">VisualPage</code> to show)</td></tr>
+                <tr><td class="py-1 pr-4 text-pc-white">Text</td><td>80×25 cells of 8×14 pixels, IBM EGA ROM font included</td></tr>
+                <tr><td class="py-1 pr-4 text-pc-white">Shape</td><td>shown at 4:3, so pixels are not square (the default aspect of <code class="text-pc-yellow">Circle</code> is 4/3 × 350/640)</td></tr>
+                <tr><td class="py-1 pr-4 text-pc-white">Other modes</td><td>1, 2, 7, 8, 11, 12, 13 — same API, see the snippet on mode 12 at the end</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    @foreach (var snippet in LibrarySnippets.All)
+    {
+        <section class="flex flex-col gap-3">
+            <h2 class="text-xl font-bold text-pc-white">@snippet.Title</h2>
+            <p class="text-sm">@snippet.Text</p>
+            <pre class="overflow-x-auto rounded border border-pc-darkgray bg-pc-black p-4 text-sm text-pc-brightgreen">@snippet.Code</pre>
+        </section>
+    }
+
+    <section class="grid gap-4 sm:grid-cols-2">
+        <div class="rounded border border-pc-darkgray p-4">
+            <div class="mb-1 font-bold text-pc-white">Screen</div>
+            <p class="text-sm">
+                <code class="text-pc-yellow">PCCanvas</code>: CGA/EGA/VGA modes (1, 2, 7, 8, 9, 11, 12, 13), palettes
+                and DAC, active and visible pages, double buffering, video memory and ports (<code class="text-pc-yellow">POKE</code>,
+                <code class="text-pc-yellow">OUT</code>), primitives: point, line, rectangle, circle and arc,
+                fill.
+            </p>
+        </div>
+        <div class="rounded border border-pc-darkgray p-4">
+            <div class="mb-1 font-bold text-pc-white">Text and fonts</div>
+            <p class="text-sm">
+                The IBM ROM fonts EGA 8×8/8×14 and VGA 8×16 are included (CC BY-SA 4.0 licence, with attribution).
+                <code class="text-pc-yellow">PCTextDisplay</code>: cursor, <code class="text-pc-yellow">LOCATE</code>,
+                scrolling, text inside the graphics modes. <code class="text-pc-yellow">Canvas</code>: the cell model
+                (character + 16 colours) for terminals.
+            </p>
+        </div>
+        <div class="rounded border border-pc-darkgray p-4">
+            <div class="mb-1 font-bold text-pc-white">Sprites</div>
+            <p class="text-sm">
+                <code class="text-pc-yellow">PCSprite</code>: <code class="text-pc-yellow">GET</code>/<code class="text-pc-yellow">PUT</code>
+                in the format of QBasic buffers, with PSET, PRESET, XOR, AND, OR. <code class="text-pc-yellow">PCImage</code>
+                for indexed images.
+            </p>
+        </div>
+        <div class="rounded border border-pc-darkgray p-4">
+            <div class="mb-1 font-bold text-pc-white">Sound and keyboard</div>
+            <p class="text-sm">
+                <code class="text-pc-yellow">PCMusic</code> turns the <code class="text-pc-yellow">PLAY</code> language
+                into tones; <code class="text-pc-yellow">PCSpeaker</code> plays them in a queue (in the background too) on
+                Console.Beep or silently. <code class="text-pc-yellow">PCKeyboard</code> encodes keys as
+                <code class="text-pc-yellow">INKEY$</code>.
+            </p>
+        </div>
+        <div class="rounded border border-pc-darkgray p-4">
+            <div class="mb-1 font-bold text-pc-white">Where it draws</div>
+            <p class="text-sm">
+                <code class="text-pc-yellow">PixelWindow</code> (a pixel window, Windows),
+                <code class="text-pc-yellow">WindowsConsoleRenderer</code>,
+                <code class="text-pc-yellow">AnsiFrameRenderer</code> and <code class="text-pc-yellow">AnsiCanvasRenderer</code>
+                (truecolor terminals, only the changed cells), and <code class="text-pc-yellow">PngFrame</code>:
+                a frame as an indexed PNG, for browsers (this is what this site uses).
+            </p>
+        </div>
+        <div class="rounded border border-pc-darkgray p-4">
+            <div class="mb-1 font-bold text-pc-white">A single interface</div>
+            <p class="text-sm">
+                <code class="text-pc-yellow">IPixelDisplay</code> is what a running program sees: a screen to fill
+                and a keyboard to read. The native window and the browser canvas both implement it.
+            </p>
+        </div>
+    </section>
+
+    <section class="flex flex-col gap-2">
+        <h2 class="text-xl font-bold text-pc-white">What it is not</h2>
+        <p class="text-sm">
+            It does not emulate a machine: no CPU, no complete BIOS registers. It is a framebuffer that is faithful in
+            the behaviours games really use (palettes, pages, plane maps, sprites), meant for
+            writing games today that look like the ones of yesterday.
+        </p>
+    </section>
+
+    <footer class="text-sm">
+        <a href="https://github.com/marcoparenzan/Screen9" class="text-pc-brightcyan underline hover:text-pc-yellow">GitHub · marcoparenzan/Screen9</a>
+    </footer>
+</div>

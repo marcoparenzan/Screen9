@@ -1,0 +1,65 @@
+@page "/gorillas-csx"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using Screen9.Scripting
+
+<PageTitle>Gorillas (C# script) — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-3 p-4">
+    <h1 class="text-xl font-bold text-pc-white">Gorillas — C# script (.csx)</h1>
+    <p class="text-sm text-pc-gray">
+        <code class="text-pc-yellow">gorillas.csx</code>, the same file you launch from the command line with
+        <code class="text-pc-yellow">dotnet run ops/csx.cs</code>, compiled here by C# scripting (Roslyn) and run in the
+        server: the same game, the same engine devices, the browser's screen and keyboard. Click the screen, then
+        type.
+    </p>
+    <PixelDisplay @ref="display" OnKeyDown="HandleKeyDownAsync" />
+    <div class="flex flex-wrap items-center gap-4 text-sm">
+        <a href="/editor-monaco?file=gorillas.csx" class="text-pc-brightcyan underline hover:text-pc-yellow">Open gorillas.csx in Monaco</a>
+        <span class="text-pc-gray">@status</span>
+    </div>
+    <details class="rounded border border-pc-darkgray p-3">
+        <summary class="cursor-pointer text-sm font-bold text-pc-white">The code (gorillas.csx)</summary>
+        <pre class="mt-2 max-h-[32rem] overflow-auto text-xs text-pc-gray">@source</pre>
+    </details>
+</div>
+
+@code {
+    private PixelDisplay? display;
+    private BrowserDisplay? screen;
+    private readonly CancellationTokenSource cts = new();
+    private Task? runTask;
+    private string status = "";
+    private string source = "";
+
+    protected override void OnInitialized()
+        => source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "samples", "gorillas.csx"));
+
+    // Not OnInitialized: that runs before the first render, before <PixelDisplay @ref> is assigned.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender || display is null) return;
+        screen = new BrowserDisplay(display, () => { });
+        var globals = GameGlobals.ForDisplay(screen, tone => display.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds), cts.Token);
+        status = "Compiling…";
+        StateHasChanged();
+        runTask = CsxRunner.RunAsync(source, "gorillas.csx", globals, cts.Token).ContinueWith(t =>
+        {
+            status = t.IsCompletedSuccessfully ? t.Result : "Error: " + t.Exception?.GetBaseException().Message;
+            return InvokeAsync(StateHasChanged);
+        }).Unwrap();
+    }
+
+    private Task HandleKeyDownAsync(BrowserKeyEvent e)
+    {
+        screen?.Enqueue(BrowserKeyboard.Encode(e));
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        cts.Cancel();
+        screen?.Close();
+        if (runTask is not null) { try { await runTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
+    }
+}

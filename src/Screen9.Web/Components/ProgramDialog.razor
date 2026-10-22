@@ -1,0 +1,67 @@
+@* The screen a QBasic program runs in when started from an editor: a modal dialog over the page (fixed, topmost),
+   not a window on the server. Its canvas stays mounted (hidden) between runs so the JS side is ready. *@
+@implements IAsyncDisposable
+
+<div class="@(open ? "fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" : "hidden")">
+    <div class="flex max-h-full w-full max-w-4xl flex-col gap-2 rounded border border-pc-gray bg-pc-black p-3 shadow-2xl">
+        <div class="flex items-center justify-between text-sm text-pc-white">
+            <span class="font-bold">@Title</span>
+            <button @onclick="CloseAsync" class="rounded bg-pc-darkgray px-3 py-1 hover:bg-pc-brightred hover:text-black">Close</button>
+        </div>
+        <PixelDisplay @ref="screen" OnKeyDown="HandleKeyDown" />
+        <div class="text-xs text-pc-darkgray">Click the screen, then type. Close (or Stop) ends the program.</div>
+    </div>
+</div>
+
+@code {
+    private PixelDisplay? screen;
+    private BrowserDisplay? current;
+    private bool open;
+
+    /// <summary>The dialog is showing a program: the page behind it is hidden by the modal.</summary>
+    public bool IsOpen => open;
+
+    [Parameter] public string Title { get; set; } = "QBasic";
+    /// <summary>Raised on the circuit's context when the dialog closes, so the page can take the keyboard back.</summary>
+    [Parameter] public EventCallback OnClosed { get; set; }
+
+    /// <summary>For EditorRunner/EditorApplication's program-window factory (called from the runner's own
+    /// thread): a fresh display for this run, and the dialog opened in front of the page.</summary>
+    public IPixelDisplay Begin()
+    {
+        BrowserDisplay? display = null;
+        display = new BrowserDisplay(screen ?? throw new InvalidOperationException("Program dialog not ready."), () => _ = InvokeAsync(() => ClosedAsync(display)));
+        current = display;
+        _ = InvokeAsync(async () => { open = true; StateHasChanged(); if (screen is not null) await screen.FocusAsync(); });
+        return display;
+    }
+
+    /// <summary>PLAY/BEEP/SOUND for the program in this dialog: real Web Audio, then the tone's duration as pacing.</summary>
+    public async ValueTask PlayAsync(PCTone tone, CancellationToken token)
+    {
+        screen?.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds);
+        await Task.Delay(tone.Duration, token);
+    }
+
+    /// <summary>Fire-and-forget Web Audio tone, for hosts that pace the program themselves (Python).</summary>
+    public void RequestTone(PCTone tone) => screen?.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds);
+
+    private void HandleKeyDown(BrowserKeyEvent e) => current?.Enqueue(BrowserKeyboard.Encode(e));
+
+    private async Task CloseAsync()
+    {
+        current?.Close();
+        await ClosedAsync(current);
+    }
+
+    private async Task ClosedAsync(BrowserDisplay? display)
+    {
+        if (!open) return;
+        if (display is not null && !ReferenceEquals(display, current)) return;
+        open = false;
+        StateHasChanged();
+        await OnClosed.InvokeAsync();
+    }
+
+    public ValueTask DisposeAsync() { current?.Close(); return ValueTask.CompletedTask; }
+}

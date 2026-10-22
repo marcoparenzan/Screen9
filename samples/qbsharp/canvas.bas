@@ -1,0 +1,10 @@
+﻿' Screen9 cell canvas, not CGA/EGA pixels. Native on Windows console, text snapshot in pipelines/editor.
+Dim canvas = Screen.Create(24, 12)
+Screen.Clear(canvas, " ", 15, 1)
+Screen.Rectangle(canvas, 0, 0, 24, 12, "#", 11, 1)
+Screen.Text(canvas, 2, 1, "Screen9", 14, 1)
+Screen.Ellipse(canvas, 12, 6, 4, 2, "*", 10, 1)
+Screen.Line(canvas, 2, 9, 20, 9, "-", 9, 1)
+Dim sprite = Screen.Get(canvas, 8, 4, 9, 5)
+Screen.Put(canvas, sprite, 2, 3, " ")
+Screen.Render(canvas)

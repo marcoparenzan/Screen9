@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>GorillasCore</AssemblyName>
+    <RootNamespace>Gorilla</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Gorillas.cs is a file-based app (#!/#: directives) in this same folder, not a library source file. -->
+    <Compile Remove="Gorillas.cs" />
+    <ProjectReference Include="../../../src/Screen9/Screen9.csproj" />
+  </ItemGroup>
+</Project>

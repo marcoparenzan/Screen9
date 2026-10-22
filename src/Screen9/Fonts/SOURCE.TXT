@@ -1,0 +1,6 @@
+IBM PC ROM fonts converted to raw 256-glyph dumps (one byte per row, MSB left).
+Source: The Ultimate Oldschool PC Font Pack v2.2 by VileR, https://int10h.org/oldschool-pc-fonts/
+Archive: https://int10h.org/oldschool-pc-fonts/download/oldschool_pc_font_pack_v2.2_win.zip
+SHA-256: ec0aad90d3eed2d468009bd0b9baa89f8ff5e68c3d1346db7de8528ec2fa2933
+Files: Bm437_IBM_EGA_8x8.FON -> ibm8x8.rom, Bm437_IBM_EGA_8x14.FON -> ibm8x14.rom, Bm437_IBM_VGA_8x16.FON -> ibm8x16.rom
+License: Creative Commons Attribution-ShareAlike 4.0 International (see LICENSE.TXT).

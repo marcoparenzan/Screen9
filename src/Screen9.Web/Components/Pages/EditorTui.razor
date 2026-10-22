@@ -1,0 +1,67 @@
+@page "/editor"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using QBSharp.Cli
+@using QBSharp.Cli.Editor
+
+<PageTitle>Editor — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-3 p-4">
+    <h1 class="text-xl font-bold text-pc-white">QBSharp editor</h1>
+    <p class="text-sm text-pc-gray">
+        The same full-screen editor as <code class="text-pc-yellow">qbs edit</code>: F1 Help, F2 Save, F3 Open,
+        F5 Run (opens in a window in front of the page), F6 Stop, F10 menu. Files save to a temporary folder for this browser tab only — no
+        server persistence yet. Keyboard only for now (no mouse). Click the screen, then type.
+    </p>
+    <PixelDisplay @ref="display" OnKeyDown="HandleKeyDownAsync" />
+    <ProgramDialog @ref="dialog" Title="Program" OnClosed="OnDialogClosed" />
+</div>
+
+@code {
+    private PixelDisplay? display;
+    private ProgramDialog? dialog;
+    private readonly CancellationTokenSource cts = new();
+    private BlazorEditorInputSource? inputSource;
+    private Task? editorTask;
+    private string? sessionDirectory;
+
+    // Not OnInitialized: that runs before the first render, before <PixelDisplay @ref> is assigned.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) editorTask = Task.Run(() => RunAsync(cts.Token));
+    }
+
+    private async Task RunAsync(CancellationToken token)
+    {
+        if (display is null) return;
+        sessionDirectory = SessionWorkspace.Create();
+        string startFile = SessionWorkspace.Seed(sessionDirectory);
+        inputSource = new BlazorEditorInputSource();
+        // F5 runs the program in the browser dialog (never the default native PixelWindow, which on a web host
+        // would open on the server, behind the browser); no Ralf here for now (F7 says it isn't configured).
+        var app = new EditorApplication(() => inputSource, () => new BlazorEditorScreen(display, () => dialog?.IsOpen == true), dialect: "qbasic")
+        {
+            ProgramWindow = () => dialog!.Begin(),
+            Audio = (tone, t) => dialog!.PlayAsync(tone, t),
+            EnableAi = false,
+            TimerWaitScale = QBasicRunPolicy.CalibratedTimerWaitScale, // QBasic-era pauses at their intended length
+        };
+        try { await app.RunAsync(startFile, token); }
+        catch (OperationCanceledException) { } // circuit disposed
+        finally { if (sessionDirectory is not null) SessionWorkspace.Delete(sessionDirectory); }
+    }
+
+    private Task OnDialogClosed() => display is null ? Task.CompletedTask : display.FocusAsync();
+
+    private Task HandleKeyDownAsync(BrowserKeyEvent e)
+    {
+        inputSource?.Enqueue(BlazorEditorInput.Decode(e));
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        cts.Cancel();
+        if (editorTask is not null) { try { await editorTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
+    }
+}

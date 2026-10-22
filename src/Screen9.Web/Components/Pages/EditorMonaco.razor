@@ -1,0 +1,358 @@
+@page "/editor-monaco"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.Hosting
+@using QBSharp.Cli
+@using Screen9.Scripting
+@using QBSharp.Cli.Editor
+
+<PageTitle>Editor (Monaco) — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 p-4">
+    <div>
+        <h1 class="text-xl font-bold text-pc-white">QBSharp editor — Monaco</h1>
+        <p class="text-sm text-pc-gray">
+            Run executes the editor's text (even unsaved) with the runtime chosen by the file extension: <code class="text-pc-yellow">.bas</code> QBasic/QBS,
+            <code class="text-pc-yellow">.py</code> PySharp, <code class="text-pc-yellow">.csx</code> C# scripting. The program opens in a window
+            in front of the page (the browser's screen, keyboard and audio); output and errors appear in the log under the editor.
+            Files live in a temporary folder for this tab only.
+        </p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+        <select value="@currentFile" @onchange="OnFileSelectedAsync" class="rounded border border-pc-darkgray bg-pc-black px-2 py-1 text-pc-white">
+            @foreach (var file in Files)
+            {
+                <option value="@file">@file</option>
+            }
+        </select>
+        <button @onclick="SaveAsync" class="rounded bg-pc-darkgray px-3 py-1 text-white hover:bg-pc-blue" title="Save to this tab's temporary folder (Run uses the editor's text anyway)">Save</button>
+        <input @bind="newFileName" @bind:event="oninput" @onkeydown="OnNewFileKeyDown" placeholder="new.py, .csx or .bas"
+               class="w-44 rounded border border-pc-darkgray bg-pc-black px-2 py-1 text-pc-white" />
+        <button @onclick="NewFileAsync" class="rounded bg-pc-darkgray px-3 py-1 text-white hover:bg-pc-blue" title="New in-memory file: the extension picks the runtime">New</button>
+        <span class="mx-1 text-pc-darkgray">·</span>
+        <span class="text-pc-gray" title="The interpreter is chosen by the file extension">@ScriptLanguages.Display(Language)</span>
+        @if (Language == ScriptLanguage.Basic)
+        {
+            <label class="inline-flex items-center gap-1"><input type="radio" name="dialect" checked="@(dialect == "qbasic")" @onchange="SetDialectQBasic" /> QBasic</label>
+            <label class="inline-flex items-center gap-1"><input type="radio" name="dialect" checked="@(dialect == "qbs")" @onchange="SetDialectQbs" /> QBS (modern)</label>
+        }
+        <span class="mx-1 text-pc-darkgray">·</span>
+        <button @onclick="RunAsync" disabled="@Busy" class="rounded bg-pc-brightgreen px-4 py-1 font-bold text-black disabled:opacity-50">Run</button>
+        <button @onclick="Stop" disabled="@(!Busy)" class="rounded bg-pc-brightred px-4 py-1 font-bold text-black disabled:opacity-50">Stop</button>
+        @if (runStatus is not null)
+        {
+            <span class="text-pc-gray">@runStatus</span>
+        }
+    </div>
+
+    <div @ref="editorElement" class="h-[70vh] rounded border border-pc-darkgray"></div>
+
+    @if (pendingPrompt is { } prompt)
+    {
+        <div class="rounded border border-pc-yellow bg-pc-blue/30 p-3">
+            <div class="mb-2 font-bold text-pc-yellow">@prompt.Title</div>
+            @if (prompt.Kind == EditorPromptKind.Input)
+            {
+                <input @bind="promptAnswer" @bind:event="oninput" class="w-full rounded bg-pc-black px-2 py-1 text-pc-white" />
+                <button @onclick="() => AnswerPrompt(promptAnswer)" class="mt-2 rounded bg-pc-brightblue px-3 py-1 text-white">OK</button>
+            }
+            else if (prompt.Kind == EditorPromptKind.Message)
+            {
+                <button @onclick="AnswerMessagePrompt" class="mt-1 rounded bg-pc-brightblue px-3 py-1 text-white">OK</button>
+            }
+            else if (prompt.Kind == EditorPromptKind.Select)
+            {
+                @foreach (var choice in prompt.Choices)
+                {
+                    <button @onclick="() => AnswerPrompt(choice)" class="mr-2 mt-1 rounded bg-pc-darkgray px-3 py-1 text-white hover:bg-pc-blue">@choice</button>
+                }
+            }
+            else
+            {
+                @for (int i = 0; i < prompt.Choices.Count; i++)
+                {
+                    int index = i;
+                    <label class="mr-3 inline-flex items-center gap-1">
+                        <input type="checkbox" checked="@promptChecked.Contains(index)" @onchange="e => ToggleChecked(index, (bool)e.Value!)" />
+                        @prompt.Choices[index]
+                    </label>
+                }
+                <button @onclick="AnswerMultiSelect" class="mt-2 block rounded bg-pc-brightblue px-3 py-1 text-white">OK</button>
+            }
+        </div>
+    }
+
+    @if (log.Count > 0)
+    {
+        <div class="rounded border border-pc-darkgray bg-pc-black">
+            <div class="flex items-center justify-between border-b border-pc-darkgray px-3 py-1 text-sm">
+                <span class="font-bold text-pc-white">Log</span>
+                <button @onclick="ClearLog" class="rounded px-2 text-pc-gray hover:bg-pc-blue hover:text-white">Clear</button>
+            </div>
+            <div class="max-h-60 overflow-auto px-3 py-2 font-mono text-sm">
+                @foreach (var line in log)
+                {
+                    <div class="@(line.IsError ? "whitespace-pre-wrap text-pc-brightred" : "whitespace-pre-wrap text-pc-gray")">@line.Text</div>
+                }
+            </div>
+        </div>
+    }
+
+    <ProgramDialog @ref="dialog" Title="@currentFile" OnClosed="OnDialogClosed" />
+</div>
+
+@code {
+    private ElementReference editorElement;
+    private ProgramDialog? dialog;
+    private IJSObjectReference? monacoModule;
+    private IJSObjectReference? monacoHost;
+    private readonly CancellationTokenSource cts = new();
+    private EditorRunner? runner;
+    private Task? pollTask;
+    private string? sessionDirectory;
+
+    private string dialect = "qbasic";
+    private string currentFile = "GORILLA.BAS";
+    private EditorPrompt? pendingPrompt;
+    private string promptAnswer = "";
+    private readonly HashSet<int> promptChecked = [];
+    private string? runStatus;
+    private string newFileName = "";
+
+    /// <summary>A line of the log under the editor: program output (grey) or an error (red).</summary>
+    private sealed class LogLine(string text, bool isError) { public string Text { get; } = text; public bool IsError { get; set; } = isError; }
+    private const int MaxLogLines = 1000;
+    private readonly List<LogLine> log = [];
+
+    [Inject] private IJSRuntime JS { get; set; } = null!;
+    [SupplyParameterFromQuery(Name = "file")] public string? FileParameter { get; set; }
+
+    private CancellationTokenSource? scriptCts;
+    private Task<string>? scriptTask;
+    private ScriptLanguage Language => ScriptLanguages.ForFile(currentFile);
+    [Inject] private IWebHostEnvironment Environment { get; set; } = null!;
+    [Inject] private IConfiguration Configuration { get; set; } = null!;
+    private bool ServerCodeAllowed => ScriptLanguages.ServerCodeAllowed(Environment.IsDevelopment(), Configuration["Screen9:AllowServerCode"]);
+    private bool Busy => (runner?.Running ?? false) || (scriptTask is { IsCompleted: false });
+
+    private List<string> Files => sessionDirectory is null
+        ? []
+        : Directory.GetFiles(sessionDirectory).Select(Path.GetFileName).OfType<string>().OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        sessionDirectory = SessionWorkspace.Create();
+        SessionWorkspace.Seed(sessionDirectory);
+        // ?file=gorillas.py (the Python page links here): open that sample first, if it exists.
+        if (FileParameter is { Length: > 0 } wanted && File.Exists(Path.Combine(sessionDirectory, Path.GetFileName(wanted)))) currentFile = Path.GetFileName(wanted);
+        string initialText = await File.ReadAllTextAsync(Path.Combine(sessionDirectory, currentFile));
+
+        monacoModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/monacoHost.js");
+        monacoHost = await monacoModule.InvokeAsync<IJSObjectReference>("createMonacoHost", editorElement, initialText);
+        await monacoHost.InvokeVoidAsync("setLanguage", ScriptLanguages.MonacoLanguage(Language));
+        StateHasChanged();
+
+        // QBasic programs run in the dialog (a browser screen, never a native window on the server) with real
+        // Web Audio. No Ralf here (removed for now).
+        double timerWaitScale = await Task.Run(() => QBasicRunPolicy.CalibratedTimerWaitScale); // QBasic-era pauses at their intended length
+        runner = new EditorRunner(audio: (tone, token) => dialog!.PlayAsync(tone, token), window: () => dialog!.Begin(), timerWaitScale: timerWaitScale);
+        pollTask = Task.Run(() => PollLoopAsync(cts.Token));
+    }
+
+    /// <summary>Drains output, prompts and results of a QBasic/QBS run: output lines and errors go to the log under
+    /// the editor (the program's screen is the dialog). Frames go to the dialog directly, not through TryTakeFrame.</summary>
+    private async Task PollLoopAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(50));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                if (runner is not { } r) continue;
+
+                List<string>? lines = null;
+                while (r.TryReadOutput(out var line)) (lines ??= []).Add(line ?? "");
+                EditorPrompt? newPrompt = pendingPrompt is null && r.TryReadPrompt(out var prompt) ? prompt : null;
+                var result = r.TakeResult();
+                if (newPrompt is null && result is null && lines is null) continue;
+
+                await InvokeAsync(() =>
+                {
+                    if (lines is not null) foreach (var line in lines) Log(line);
+                    if (newPrompt is not null) { pendingPrompt = newPrompt; promptAnswer = newPrompt.Default; promptChecked.Clear(); }
+                    if (result is not null)
+                    {
+                        runStatus = result.Diagnostic?.ToString() ?? result.Status;
+                        if (result.Diagnostic is not null) Log(result.Diagnostic.ToString()!, isError: true);
+                        else if (result.Status is not ("Completed" or "Canceled")) Log(result.Status, isError: true);
+                    }
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void Log(string text, bool isError = false)
+    {
+        foreach (var line in text.Split('\n')) log.Add(new LogLine(line.TrimEnd('\r'), isError));
+        if (log.Count > MaxLogLines) log.RemoveRange(0, log.Count - MaxLogLines);
+    }
+
+    private void ClearLog() => log.Clear();
+
+    /// <summary>A new file lives in this tab's temporary folder; the extension picks the runtime (.bas by default).</summary>
+    private async Task NewFileAsync()
+    {
+        string name = Path.GetFileName(newFileName.Trim());
+        if (name.Length == 0 || sessionDirectory is null) return;
+        if (!Path.HasExtension(name)) name += ".bas";
+        if (!ScriptLanguages.IsSupported(name)) { Log($"Unsupported extension: {name} (use .bas, .py or .csx)", isError: true); return; }
+        string path = Path.Combine(sessionDirectory, name);
+        await SaveAsync();
+        if (!File.Exists(path)) await File.WriteAllTextAsync(path, "");
+        newFileName = "";
+        currentFile = name;
+        runStatus = null;
+        await LoadSelectedFileAsync();
+    }
+
+    private async Task OnNewFileKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await NewFileAsync();
+    }
+
+    /// <summary>Picking a file in the list opens it at once (the editor's text is saved to the previous file
+    /// first, so switching never loses edits) — no separate Open step to forget.</summary>
+    private async Task OnFileSelectedAsync(ChangeEventArgs e)
+    {
+        if (e.Value is not string file || file == currentFile) return;
+        await SaveAsync();
+        currentFile = file;
+        runStatus = null;
+        await LoadSelectedFileAsync();
+    }
+
+    private async Task LoadSelectedFileAsync()
+    {
+        if (sessionDirectory is null || monacoHost is null) return;
+        string text = await File.ReadAllTextAsync(Path.Combine(sessionDirectory, currentFile));
+        await monacoHost.InvokeVoidAsync("setValue", text);
+        await monacoHost.InvokeVoidAsync("setLanguage", ScriptLanguages.MonacoLanguage(Language));
+    }
+
+    private async Task SaveAsync()
+    {
+        if (sessionDirectory is null || monacoHost is null) return;
+        string text = await monacoHost.InvokeAsync<string>("getValue");
+        await File.WriteAllTextAsync(Path.Combine(sessionDirectory, currentFile), text);
+    }
+
+    private async Task RunAsync()
+    {
+        if (runner is null || monacoHost is null || Busy) return;
+        string text = await monacoHost.InvokeAsync<string>("getValue");
+        runStatus = null; pendingPrompt = null;
+        log.Clear();
+        if (Language != ScriptLanguage.Basic)
+        {
+            if (!ServerCodeAllowed)
+            {
+                runStatus = "Running Python or C# on the server is disabled here (set Screen9:AllowServerCode=true to enable it; by default only in Development).";
+                Log(runStatus, isError: true);
+                return;
+            }
+            RunScript(text);
+            return;
+        }
+        try
+        {
+            runner.Start(text, Path.Combine(sessionDirectory ?? "", currentFile),
+                dialect == "qbasic" ? QBasicRunPolicy.InteractiveMaximumSteps : 1_000_000, dialect);
+        }
+        catch (InvalidOperationException e) { runStatus = e.Message; Log(e.Message, isError: true); }
+    }
+
+    /// <summary>A Python or C# script runs on its embedded interpreter (PySharp, Roslyn scripting), in this process,
+    /// on the same dialog screen as QBasic.</summary>
+    private void RunScript(string text)
+    {
+        var display = dialog!.Begin();
+        scriptCts = new CancellationTokenSource();
+        runStatus = Language == ScriptLanguage.CSharp ? "Compiling…" : "Running";
+        var language = Language;
+        scriptTask = language == ScriptLanguage.CSharp
+            ? CsxRunner.RunAsync(text, currentFile, GameGlobals.ForDisplay(display, dialog.RequestTone, scriptCts.Token), scriptCts.Token)
+            : PythonGames.RunAsync(text, currentFile, new PythonGameHost(display, dialog.RequestTone, scriptCts.Token),
+                line => InvokeAsync(() => { Log(line); StateHasChanged(); })); // print() output and the traceback
+        _ = scriptTask.ContinueWith(t => InvokeAsync(() =>
+        {
+            runStatus = t.IsCompletedSuccessfully ? t.Result : "Error: " + t.Exception?.GetBaseException().Message;
+            ReportScriptResult(language, runStatus);
+            display.Dispose(); // closes the dialog
+            StateHasChanged();
+        }));
+    }
+
+    /// <summary>A failed script shows its error in red in the log: the C# compiler diagnostics (one per line), or the
+    /// Python traceback already logged as the script's output, which is only marked as an error.</summary>
+    private void ReportScriptResult(ScriptLanguage language, string result)
+    {
+        if (!result.StartsWith("Error: ", StringComparison.Ordinal)) return;
+        string message = result["Error: ".Length..];
+        if (language == ScriptLanguage.Python)
+        {
+            var errorLines = message.Split('\n').Select(l => l.TrimEnd('\r')).Append(message).ToHashSet();
+            bool marked = false;
+            foreach (var line in log.Where(l => !l.IsError && errorLines.Contains(l.Text))) { line.IsError = true; marked = true; }
+            if (!marked) Log(message, isError: true);
+        }
+        else
+        {
+            foreach (var part in message.Split(" | ")) Log(part, isError: true);
+        }
+    }
+
+    private void Stop()
+    {
+        runner?.Cancel();
+        scriptCts?.Cancel();
+    }
+
+    private void OnDialogClosed() => Stop();
+
+    private void SetDialectQBasic() => dialect = "qbasic";
+    private void SetDialectQbs() => dialect = "qbs";
+
+    private void AnswerPrompt(object? answer)
+    {
+        pendingPrompt?.Completion.TrySetResult(answer);
+        pendingPrompt = null;
+    }
+
+    private void AnswerMessagePrompt() => AnswerPrompt("OK");
+
+    private void ToggleChecked(int index, bool value)
+    {
+        if (value) promptChecked.Add(index); else promptChecked.Remove(index);
+    }
+
+    private void AnswerMultiSelect()
+    {
+        if (pendingPrompt is { } p) AnswerPrompt(p.Choices.Where((_, i) => promptChecked.Contains(i)).ToList());
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        cts.Cancel();
+        scriptCts?.Cancel();
+        if (pollTask is not null) { try { await pollTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
+        if (runner is not null) await runner.DisposeAsync();
+        if (monacoHost is not null) { try { await monacoHost.InvokeVoidAsync("dispose"); } catch (JSDisconnectedException) { } try { await monacoHost.DisposeAsync(); } catch (JSDisconnectedException) { } }
+        if (monacoModule is not null) { try { await monacoModule.DisposeAsync(); } catch (JSDisconnectedException) { } }
+        if (sessionDirectory is not null) SessionWorkspace.Delete(sessionDirectory);
+    }
+}

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4"><IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets><PrivateAssets>all</PrivateAssets></PackageReference>
+    <ProjectReference Include="../QBSharp.Core/QBSharp.Core.csproj" />
+    <ProjectReference Include="../QBSharp.QBasic/QBSharp.QBasic.csproj" />
+    <ProjectReference Include="../QBSharp.AI/QBSharp.AI.csproj" />
+    <ProjectReference Include="../QBSharp.StandardLibrary/QBSharp.StandardLibrary.csproj" />
+    <ProjectReference Include="../QBSharp.Cli/QBSharp.Cli.csproj" />
+    <ProjectReference Include="../QBSharp.TerminalHarness/QBSharp.TerminalHarness.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <None Include="../../samples/qbsharp/**/*.bas" Exclude="../../samples/qbsharp/Gorilla/**" Link="samples/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/qbsharp/Gorilla/GORILLA.BAS" Link="samples/GORILLA.BAS" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

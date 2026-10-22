@@ -1,0 +1,58 @@
+﻿@page "/"
+
+<PageTitle>Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 px-6 py-12">
+    <header class="flex flex-col gap-4">
+        <img src="/images/screen9-logo-v2.png" alt="Screen9" class="h-24 w-auto self-start" />
+        <p class="text-lg text-pc-gray">
+            A .NET engine for games with a retro flavour but a modern build. It was born from <span class="text-pc-yellow">QBasic</span>
+            and its <code class="text-pc-yellow">SCREEN 9</code> (EGA, 640×350, 16 colours), and has an emblem:
+            <span class="text-pc-white">Gorilla</span>, the same game written in C#, in QBasic, in Python and as a C# script,
+            on the same engine.
+        </p>
+        <div class="flex flex-wrap gap-3 text-sm">
+            <a href="/history" class="rounded border border-pc-darkgray px-3 py-1 text-pc-white hover:bg-pc-blue">Read the Mode 9 history</a>
+            <a href="https://github.com/marcoparenzan/Screen9" class="rounded border border-pc-darkgray px-3 py-1 text-pc-white hover:bg-pc-blue">GitHub · marcoparenzan/Screen9</a>
+        </div>
+    </header>
+
+    <section class="grid gap-4 sm:grid-cols-3">
+        <div class="rounded border border-pc-darkgray bg-pc-blue/40 p-4">
+            <div class="mb-2 font-bold text-pc-white">Screen9</div>
+            <ul class="flex flex-col gap-1 text-sm">
+                <li><a href="/history" class="text-pc-brightcyan underline hover:text-pc-yellow">Mode 9 history</a></li>
+                <li><a href="/library" class="text-pc-brightcyan underline hover:text-pc-yellow">Library · Coding Guide</a></li>
+            </ul>
+        </div>
+        <div class="rounded border border-pc-darkgray bg-pc-blue/40 p-4">
+            <div class="mb-2 font-bold text-pc-white">Gorilla Scripted</div>
+            <ul class="flex flex-col gap-1 text-sm">
+                <li><a href="/gorillas-bas" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas — QBasic (.bas)</a></li>
+                <li><a href="/gorillas-python" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas — Python (PySharp)</a></li>
+                <li><a href="/gorillas-csx" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas — C# script (.csx)</a></li>
+                <li><a href="/editor" class="text-pc-brightcyan underline hover:text-pc-yellow">QBasic Editor</a></li>
+                <li><a href="/editor-monaco" class="text-pc-brightcyan underline hover:text-pc-yellow">Monaco Editor</a></li>
+            </ul>
+        </div>
+        <div class="rounded border border-pc-darkgray bg-pc-blue/40 p-4">
+            <div class="mb-2 font-bold text-pc-white">C# Games</div>
+            <ul class="flex flex-col gap-1 text-sm">
+                <li><a href="/gorillas-csharp" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas</a></li>
+                <li>
+                    <a href="/rally-x" class="text-pc-brightcyan underline hover:text-pc-yellow">Rally-X</a>
+                    <span class="text-pc-yellow"> · work in progress</span>
+                </li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="flex flex-col gap-3 text-sm">
+        <h2 class="text-xl font-bold text-pc-white">What you can do here</h2>
+        <ul class="flex list-disc flex-col gap-1 pl-5">
+            <li>Play <span class="text-pc-white">Gorillas</span> as the 1990 QBasic original, as Python, as a C# script or as a native C# game.</li>
+            <li>Open any of those programs in the <span class="text-pc-white">Monaco Editor</span>, change it in memory and run it again: the extension (<code class="text-pc-yellow">.bas</code>, <code class="text-pc-yellow">.py</code>, <code class="text-pc-yellow">.csx</code>) picks the runtime.</li>
+            <li>Read the <span class="text-pc-white">Library</span> coding guide to use the engine from your own .NET app.</li>
+        </ul>
+    </section>
+</div>

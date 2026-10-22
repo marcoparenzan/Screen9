@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../QBSharp.Core/QBSharp.Core.csproj" />
+    <ProjectReference Include="../QBSharp.StandardLibrary/QBSharp.StandardLibrary.csproj" />
+    <PackageReference Include="RalfAI.Providers" Version="1.0.4" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.3" />
+  </ItemGroup>
+</Project>

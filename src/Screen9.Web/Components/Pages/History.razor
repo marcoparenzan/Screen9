@@ -1,0 +1,115 @@
+@page "/history"
+
+<PageTitle>Mode 9 history — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-12">
+    <header class="flex flex-col gap-3">
+        <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">Screen9 · History</div>
+        <h1 class="text-3xl font-bold text-pc-white">Mode 9 history</h1>
+        <p class="text-pc-gray">
+            <code class="text-pc-yellow">SCREEN 9</code> was the best graphics mode of QBasic on an EGA card: 640×350 pixels,
+            16 colours out of a palette of 64, two video pages, text in an 80×25 grid of 8×14 cells. Its pixels are not
+            square, so the picture is shown at 4:3. This engine started as a way to run the games written for it, and
+            kept growing from there.
+        </p>
+    </header>
+
+    <ol class="flex flex-col gap-6 border-l-2 border-pc-blue pl-6">
+        <li class="flex flex-col gap-1">
+            <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">1 · QBasic</div>
+            <p>
+                The starting point is <code class="text-pc-yellow">GORILLA.BAS</code>, the game Microsoft shipped
+                with QBasic in 1990: two gorillas on a skyline, a banana, the wind. A whole program in a single file,
+                with pixel graphics, text, sounds and keyboard. The first question was simple:
+                <em>can it still be run today, untouched?</em>
+            </p>
+            <p>
+                That is how <span class="text-pc-white">QBSharp</span> was born: a QBasic interpreter written in C#, with
+                a modern dialect next to the classic one (<code class="text-pc-yellow">qbs</code>) and a
+                full-screen editor. GORILLA.BAS runs without changes.
+            </p>
+            <div class="flex gap-3 text-sm">
+                <a href="/gorillas-bas" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (.bas)</a>
+                <a href="/editor" class="text-pc-brightcyan underline hover:text-pc-yellow">QBasic Editor</a>
+                <a href="/editor-monaco" class="text-pc-brightcyan underline hover:text-pc-yellow">Monaco Editor</a>
+            </div>
+        </li>
+
+        <li class="flex flex-col gap-1">
+            <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">2 · The engine</div>
+            <p>
+                To run a game of that kind a machine was needed, not an interpreter: an indexed framebuffer with the
+                CGA/EGA/VGA modes, the palette, pages, primitives (point, line, circle, fill),
+                <code class="text-pc-yellow">GET</code>/<code class="text-pc-yellow">PUT</code> sprites,
+                the IBM ROM fonts, <code class="text-pc-yellow">PLAY</code> and the speaker, the pixel window.
+                All this was split out of the interpreter and called <span class="text-pc-white">Screen9</span>.
+            </p>
+            <p>
+                The point is that the engine knows nothing about QBasic: it is used from C# alone, as a retro engine for
+                games.
+            </p>
+            <a href="/library" class="w-fit text-sm text-pc-brightcyan underline hover:text-pc-yellow">Library · Coding Guide</a>
+        </li>
+
+        <li class="flex flex-col gap-1">
+            <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">3 · Embedding</div>
+            <p>
+                At that point Gorilla could live in several forms on the same engine. In C#, directly
+                (<code class="text-pc-yellow">GorillasCore</code>: the game logic, with nothing native,
+                and the executable reduced to a simple "Run"). In QBasic, run by the interpreter. And the
+                next step: <span class="text-pc-white">having an embeddable language run Gorillas</span>,
+                on a par with any other, because the engine is a neutral host: whoever embeds it hands it
+                screen, keyboard and sound, and the language does the rest.
+            </p>
+            <a href="/gorillas-csharp" class="w-fit text-sm text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (C#)</a>
+        </li>
+
+        <li class="flex flex-col gap-1">
+            <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">4 · Python and C# scripting</div>
+            <p>
+                The second embeddable language is <span class="text-pc-white">PySharp</span>, a Python interpreter
+                written in C# that can be embedded too. Screen9 became a
+                <code class="text-pc-yellow">screen9</code> package installed with its mini-pip
+                (<code class="text-pc-yellow">pysharp install screen9</code>) and used with
+                <code class="text-pc-yellow">import screen9</code>: <code class="text-pc-yellow">gorillas.py</code>
+                plays the same match as the C# one, with the same seed and the same frames, launched by
+                <code class="text-pc-yellow">pysharp run</code>, with no C# host in between. On this site, PySharp is
+                embedded in the server: the same file.
+            </p>
+            <div class="flex gap-3 text-sm">
+                <a href="/gorillas-python" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (Python)</a>
+                <a href="/editor-monaco?file=gorillas.py" class="text-pc-brightcyan underline hover:text-pc-yellow">gorillas.py in Monaco</a>
+            </div>
+            <p>
+                And C# itself, as an embeddable language: <code class="text-pc-yellow">gorillas.csx</code> is the same
+                game as a script, run by C# scripting (Roslyn) with the same devices. From the command line:
+                <code class="text-pc-yellow">dotnet run ops/csx.cs -- gorillas.csx</code>. On the web, the same page or
+                Monaco, which picks the interpreter from the file extension: <code class="text-pc-yellow">.bas</code>,
+                <code class="text-pc-yellow">.py</code>, <code class="text-pc-yellow">.csx</code>.
+            </p>
+            <div class="flex gap-3 text-sm">
+                <a href="/gorillas-csx" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (C# script)</a>
+                <a href="/editor-monaco?file=gorillas.csx" class="text-pc-brightcyan underline hover:text-pc-yellow">gorillas.csx in Monaco</a>
+            </div>
+        </li>
+
+        <li class="flex flex-col gap-1">
+            <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">5 · More C# games</div>
+            <p>
+                A second game shows the engine is not about one title: <span class="text-pc-white">Rally-X</span>, brought from
+                a Phaser project to true pixel art in mode 12 (640×480, 16 colours), with its own device-free simulation
+                and an autopilot used for tests and for the demo. It is still a work in progress.
+            </p>
+            <a href="/rally-x" class="w-fit text-sm text-pc-brightcyan underline hover:text-pc-yellow">Rally-X</a>
+        </li>
+
+        <li class="flex flex-col gap-1">
+            <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">6 · The web</div>
+            <p>
+                This site. The same engine and the same interpreters, served by a browser (Blazor Server):
+                each tab is an independent session. The screen is a canvas, the keyboard the browser's, the audio
+                Web Audio. The program opens in a window in front of the page.
+            </p>
+        </li>
+    </ol>
+</div>

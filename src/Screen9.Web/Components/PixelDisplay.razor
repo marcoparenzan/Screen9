@@ -1,0 +1,129 @@
+@* Canvas + keyboard + Web Audio for one running program: PCCanvas/Canvas frames in, INKEY$-style keys out,
+   PC-speaker tones out. Owns the PNG encode/throttle/JS-dispatch so a page's background game/interpreter
+   thread can call Present*/RequestTone synchronously without touching Blazor's render dispatcher itself. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<canvas @ref="canvasElement" class="mx-auto block max-h-[70vh] max-w-full bg-pc-black [image-rendering:pixelated]"></canvas>
+
+@code {
+    /// <summary>~30 Hz, the same cap PixelWindow/EditorFrameMailbox use: skip frames closer together than this.</summary>
+    private const long MinFrameIntervalMs = 33;
+
+    private ElementReference canvasElement;
+    private DotNetObjectReference<PixelDisplay>? selfReference;
+    private IJSObjectReference? pixelCanvas;
+    private IJSObjectReference? keyCapture;
+    private IJSObjectReference? toneBeeper;
+    private long lastFrameTicks;
+    private bool disposed;
+
+    // Latest-frame-wins, one draw round trip in flight at a time: a frame produced while a draw is still in
+    // flight just replaces the pending one (like PixelWindow: only the latest frame is ever drawn next), so
+    // nothing queues up behind a slow browser and the screen never falls behind real time.
+    private readonly object frameLock = new();
+    private byte[]? pendingFrame;
+    private bool drawInFlight;
+    // A frame skipped by the 33 ms cap is not lost: its encoder is kept and Flush() presents it (the final
+    // frame of a program, say, which would otherwise never reach the screen). Same thread as Present.
+    private Func<byte[]>? skipped;
+
+    [Parameter] public EventCallback<BrowserKeyEvent> OnKeyDown { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        selfReference = DotNetObjectReference.Create(this);
+        var canvasModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/pixelCanvas.js");
+        pixelCanvas = await canvasModule.InvokeAsync<IJSObjectReference>("createPixelCanvas", canvasElement);
+        var keyModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/keyCapture.js");
+        keyCapture = await keyModule.InvokeAsync<IJSObjectReference>("createKeyCapture", canvasElement, selfReference, nameof(HandleKeyDown));
+        var toneModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/toneBeeper.js");
+        toneBeeper = await toneModule.InvokeAsync<IJSObjectReference>("createToneBeeper");
+        await keyCapture.InvokeVoidAsync("focus");
+    }
+
+    [JSInvokable]
+    public async Task HandleKeyDown(BrowserKeyEvent e) => await OnKeyDown.InvokeAsync(e);
+
+    /// <summary>Gives the keyboard to this screen (e.g. when a program dialog opens over the page).</summary>
+    public async Task FocusAsync()
+    {
+        if (keyCapture is null || disposed) return;
+        try { await keyCapture.InvokeVoidAsync("focus"); } catch (JSDisconnectedException) { }
+    }
+
+    /// <summary>Thread-safe: call from the program's own background thread. Throttled to ~30 Hz.</summary>
+    public void PresentGraphics(PCCanvas canvas) => Present(() => PngFrame.Encode(canvas));
+
+    /// <summary>Thread-safe: call from the program's own background thread. Throttled like <see cref="PresentGraphics"/>.</summary>
+    public void PresentText(Canvas cells) => Present(() => PngFrame.Encode(cells));
+
+    /// <summary>Presents the last frame the 33 ms cap skipped, if the interval has passed: call from the same
+    /// thread as Present*, whenever the program waits (INKEY$ polls, sleeps).</summary>
+    public void Flush()
+    {
+        if (skipped is { } encode && Environment.TickCount64 - lastFrameTicks >= MinFrameIntervalMs) Present(encode);
+    }
+
+    private void Present(Func<byte[]> encode)
+    {
+        if (disposed || pixelCanvas is null) return;
+        long now = Environment.TickCount64;
+        if (now - lastFrameTicks < MinFrameIntervalMs) { skipped = encode; return; }
+        lastFrameTicks = now;
+        skipped = null;
+        byte[] png = encode();
+        lock (frameLock)
+        {
+            pendingFrame = png;
+            if (drawInFlight) return; // a draw is already catching up; it will pick up this (latest) frame when it loops
+            drawInFlight = true;
+        }
+        _ = InvokeAsync(DrainFramesAsync);
+    }
+
+    /// <summary>Draws pendingFrame, then checks again in case a newer one arrived while that draw was in
+    /// flight — looping until there's truly nothing left, so at most one frame is ever "in the pipe".</summary>
+    private async Task DrainFramesAsync()
+    {
+        try
+        {
+            while (true)
+            {
+                byte[]? frame;
+                lock (frameLock) { frame = pendingFrame; pendingFrame = null; if (frame is null) { drawInFlight = false; return; } }
+                if (disposed || pixelCanvas is null) return;
+                // A single byte[] argument (one SignalR message, a few KB): DotNetStreamReference needs several
+                // round trips per frame to pull the stream, which dominated the frame time.
+                try { await pixelCanvas.InvokeVoidAsync("drawPng", frame); }
+                catch (JSDisconnectedException) { return; }
+            }
+        }
+        finally { lock (frameLock) drawInFlight = false; }
+    }
+
+    /// <summary>Thread-safe, fire-and-forget: call from the program's own background thread. Does not block —
+    /// callers that need PCSpeaker.Beep's blocking-for-the-duration pacing sleep themselves afterward.</summary>
+    public void RequestTone(double frequencyHz, double durationMs)
+    {
+        if (disposed || toneBeeper is null || frequencyHz <= 0 || durationMs <= 0) return;
+        _ = InvokeAsync(async () =>
+        {
+            if (disposed || toneBeeper is null) return;
+            try { await toneBeeper.InvokeVoidAsync("play", frequencyHz, durationMs); } catch (JSDisconnectedException) { }
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        selfReference?.Dispose();
+        foreach (var module in new[] { keyCapture, pixelCanvas, toneBeeper })
+        {
+            if (module is null) continue;
+            try { await module.InvokeVoidAsync("dispose"); } catch (JSDisconnectedException) { }
+            try { await module.DisposeAsync(); } catch (JSDisconnectedException) { }
+        }
+    }
+}

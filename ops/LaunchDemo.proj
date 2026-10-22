@@ -1,0 +1,13 @@
+﻿<Project DefaultTargets="Launch">
+  <PropertyGroup>
+    <DemoProject>$(MSBuildThisFileDirectory)..\samples\csharp\Demos\Screen9.Demo.csproj</DemoProject>
+    <DemoExecutable>$(MSBuildThisFileDirectory)..\samples\csharp\Demos\bin\Debug\net10.0\Screen9.Demo.exe</DemoExecutable>
+  </PropertyGroup>
+  <Target Name="Build">
+    <MSBuild Projects="$(DemoProject)" Targets="Restore;Build" Properties="Configuration=Debug" />
+  </Target>
+  <Target Name="Launch" DependsOnTargets="Build">
+    <Error Condition="'$(OS)' != 'Windows_NT'" Text="La demo richiede Windows." />
+    <Exec Command="start &quot;&quot; &quot;$(DemoExecutable)&quot;" WorkingDirectory="$(MSBuildThisFileDirectory).." />
+  </Target>
+</Project>

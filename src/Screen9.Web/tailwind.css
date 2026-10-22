@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@source "./Components/**/*.razor";
+@source "./wwwroot/js/**/*.js";
+
+/* The CGA/EGA palette (Screen9.CgaPalette) as Tailwind colors, so the website reads as the same machine
+   as the pixel window / the retro editor: dark-blue "QBasic IDE" background, bright white text. */
+@theme {
+    --color-pc-black: #000000;
+    --color-pc-blue: #0000aa;
+    --color-pc-green: #00aa00;
+    --color-pc-cyan: #00aaaa;
+    --color-pc-red: #aa0000;
+    --color-pc-magenta: #aa00aa;
+    --color-pc-brown: #aa5500;
+    --color-pc-gray: #aaaaaa;
+    --color-pc-darkgray: #555555;
+    --color-pc-brightblue: #5555ff;
+    --color-pc-brightgreen: #55ff55;
+    --color-pc-brightcyan: #55ffff;
+    --color-pc-brightred: #ff5555;
+    --color-pc-brightmagenta: #ff55ff;
+    --color-pc-yellow: #ffff55;
+    --color-pc-white: #ffffff;
+    --font-mono-pc: 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
+}
+
+@layer base {
+    body {
+        @apply bg-pc-black text-pc-gray font-mono-pc;
+    }
+}
+
+/* Blazor Server infrastructure (not styled by Tailwind utility classes in markup): the circuit
+   reconnect dialog and the unhandled-error banner. */
+#blazor-error-ui {
+    @apply fixed inset-x-0 bottom-0 z-50 hidden box-border bg-pc-yellow px-5 py-3 text-pc-black shadow-lg;
+}
+#blazor-error-ui .dismiss {
+    @apply absolute right-3 top-2 cursor-pointer;
+}
+
+#components-reconnect-modal {
+    @apply mx-auto my-[20vh] w-80 rounded-lg border-0 bg-white p-8 text-pc-black shadow-xl;
+}
+#components-reconnect-modal::backdrop {
+    @apply bg-black/50;
+}
+#components-reconnect-modal p {
+    @apply m-0 text-center;
+}
+#components-reconnect-modal button {
+    @apply rounded bg-pc-brightblue px-6 py-1 text-white hover:bg-pc-blue;
+}
+.components-reconnect-container {
+    @apply flex flex-col items-center gap-4;
+}
+.components-reconnect-first-attempt-visible,
+.components-reconnect-repeated-attempt-visible,
+.components-reconnect-failed-visible,
+.components-pause-visible,
+.components-resume-failed-visible,
+.components-rejoining-animation {
+    display: none;
+}
+#components-reconnect-modal.components-reconnect-show .components-reconnect-first-attempt-visible,
+#components-reconnect-modal.components-reconnect-show .components-rejoining-animation,
+#components-reconnect-modal.components-reconnect-paused .components-pause-visible,
+#components-reconnect-modal.components-reconnect-resume-failed .components-resume-failed-visible,
+#components-reconnect-modal.components-reconnect-retrying,
+#components-reconnect-modal.components-reconnect-retrying .components-reconnect-repeated-attempt-visible,
+#components-reconnect-modal.components-reconnect-retrying .components-rejoining-animation,
+#components-reconnect-modal.components-reconnect-failed,
+#components-reconnect-modal.components-reconnect-failed .components-reconnect-failed-visible {
+    display: block;
+}
+.components-rejoining-animation {
+    @apply relative h-20 w-20;
+}
+.components-rejoining-animation div {
+    @apply absolute rounded-full border-[3px] border-pc-brightblue opacity-100;
+    animation: components-rejoining-animation 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+.components-rejoining-animation div:nth-child(2) { animation-delay: -0.5s; }
+@keyframes components-rejoining-animation {
+    0% { top: 40px; left: 40px; width: 0; height: 0; opacity: 0; }
+    4.9% { top: 40px; left: 40px; width: 0; height: 0; opacity: 0; }
+    5% { top: 40px; left: 40px; width: 0; height: 0; opacity: 1; }
+    100% { top: 0; left: 0; width: 80px; height: 80px; opacity: 0; }
+}

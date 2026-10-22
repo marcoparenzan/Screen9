@@ -1,0 +1,71 @@
+﻿@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+
+@{
+    // The layout is rendered per request (pages are the interactive islands), so the current page comes from the URL.
+    var current = SiteNavigation.Find(new Uri(Navigation.Uri).AbsolutePath);
+    const string panel = "invisible absolute left-0 top-full z-20 min-w-64 rounded border border-pc-darkgray bg-pc-black py-1 opacity-0 shadow-lg group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100";
+}
+
+<div class="flex min-h-screen flex-col">
+    <header class="flex items-center gap-6 border-b border-pc-darkgray bg-pc-blue px-4 py-2 text-pc-white">
+        @* The first section (Screen9: Home, Mode 9 history, Library) hangs from the logo; the others from their titles. *@
+        @foreach (var (section, index) in SiteNavigation.Sections.Select((s, i) => (s, i)))
+        {
+            <div class="group relative">
+                @if (index == 0)
+                {
+                    <a href="/" class="flex items-center gap-1" aria-label="Screen9 menu">
+                        <img src="/images/screen9-logo-v2.png" alt="Screen9" class="h-9 w-auto" />
+                        <span class="text-xs">▾</span>
+                    </a>
+                }
+                else
+                {
+                    <button type="button" class="text-sm hover:text-pc-yellow focus:outline-none">@section.Title ▾</button>
+                }
+                <div class="@panel">
+                    @foreach (var item in section.Items)
+                    {
+                        <a href="@item.Path" class="block px-4 py-1 text-sm hover:bg-pc-blue hover:text-pc-yellow">@item.Title</a>
+                    }
+                </div>
+            </div>
+        }
+        <a href="https://github.com/marcoparenzan/Screen9" target="_blank" rel="noopener" class="ml-auto text-sm hover:text-pc-yellow">GitHub</a>
+    </header>
+
+    <div class="flex flex-1 flex-col md:flex-row">
+        @if (current is { } here)
+        {
+            <nav aria-label="@here.Section.Title" class="shrink-0 border-b border-pc-darkgray bg-pc-black/40 px-3 py-3 md:w-60 md:border-b-0 md:border-r">
+                <div class="mb-2 px-3 text-xs font-bold uppercase tracking-wide text-pc-brightblue">@here.Section.Title</div>
+                <ul class="flex flex-row flex-wrap gap-1 md:flex-col">
+                    @foreach (var item in here.Section.Items)
+                    {
+                        bool active = ReferenceEquals(item, here.Item);
+                        <li>
+                            <a href="@item.Path" aria-current="@(active ? "page" : null)"
+                               class="@(active ? "block rounded bg-pc-blue px-3 py-1 text-sm font-bold text-pc-yellow" : "block rounded px-3 py-1 text-sm text-pc-gray hover:bg-pc-blue/50 hover:text-pc-white")">
+                                @item.Title
+                                @if (item.Note is not null)
+                                {
+                                    <span class="block text-xs font-normal text-pc-darkgray">@item.Note</span>
+                                }
+                            </a>
+                        </li>
+                    }
+                </ul>
+            </nav>
+        }
+        <main class="flex min-w-0 flex-1 flex-col">
+            @Body
+        </main>
+    </div>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload underline">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

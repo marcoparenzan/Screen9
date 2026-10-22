@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>qbs</ToolCommandName>
+    <PackageId>QBSharp.Cli</PackageId>
+    <Version>0.7.0-alpha.4</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>QBSharp AST scripting CLI and QuickBASIC editor with opt-in RalfAI: run, repl, edit, new and test.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../QBSharp.Core/QBSharp.Core.csproj" />
+    <ProjectReference Include="../QBSharp.QBasic/QBSharp.QBasic.csproj" />
+    <ProjectReference Include="../QBSharp.AI/QBSharp.AI.csproj" />
+    <ProjectReference Include="../QBSharp.StandardLibrary/QBSharp.StandardLibrary.csproj" />
+    <PackageReference Include="Spectre.Console" Version="0.54.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <None Include="../../docs/qbsharp/README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

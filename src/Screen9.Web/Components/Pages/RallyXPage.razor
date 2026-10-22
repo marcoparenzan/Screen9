@@ -1,0 +1,92 @@
+@page "/rally-x"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using System.Collections.Concurrent
+@using RallyX
+
+<PageTitle>Rally-X — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-3 p-4">
+    <h1 class="text-xl font-bold text-pc-white">Rally-X — C#</h1>
+    <p class="text-sm text-pc-gray">
+        <code class="text-pc-yellow">samples/csharp/RallyX</code>'s <code class="text-pc-yellow">RallyXGame</code>, the same game that
+        runs in a native pixel window, in mode 12 (640×480, 16 colours). Click the screen, then drive:
+        arrows or WASD, <span class="text-pc-white">Space</span> for smoke, <span class="text-pc-white">P</span> to pause.
+    </p>
+    <div class="rounded border border-pc-yellow bg-pc-blue/30 p-3 text-sm">
+        <div class="mb-1 font-bold text-pc-yellow">Work in progress</div>
+        <p>
+            Rally-X is not finished. What works: the maze, the red cars that chase you, flags, rocks, smoke, fuel, lives and rounds,
+            and an autopilot that plays it. Still to do: tuning (speeds, chase behaviour and difficulty are not balanced against the
+            arcade), mouse/touch control, a saved high score, proper sound effects, and a closer camera like the original's.
+            The art is the original Rally-X (Namco/Midway), used here for demonstration only. It is the second game on the engine,
+            after Gorillas — feedback is welcome.
+        </p>
+    </div>
+    <PixelDisplay @ref="display" OnKeyDown="HandleKeyDownAsync" />
+</div>
+
+@code {
+    private PixelDisplay? display;
+    private readonly CancellationTokenSource cts = new();
+    private readonly ConcurrentQueue<string> keys = new();
+    private Task? gameTask;
+
+    // Not OnInitialized: that runs before the first render, before <PixelDisplay @ref> is assigned.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) gameTask = Task.Run(() => RunGame(cts.Token));
+    }
+
+    private void RunGame(CancellationToken token)
+    {
+        var host = new RallyXHost
+        {
+            Present = canvas => display?.PresentGraphics(canvas),
+            ReadKey = () => keys.TryDequeue(out var key) ? key : "",
+            Sleep = delay => Sleep(delay, token),
+            Sound = tones => _ = Task.Run(async () =>
+            {
+                foreach (var tone in tones)
+                {
+                    token.ThrowIfCancellationRequested();
+                    display?.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds);
+                    await Task.Delay(tone.Duration, token);
+                }
+            }, token),
+            Seed = () => Random.Shared.Next(),
+        };
+        try
+        {
+            var game = new RallyXGame(host);
+            while (!token.IsCancellationRequested) game.Run(); // Esc on the title screen just shows it again
+        }
+        catch (OperationCanceledException) { } // circuit disposed
+    }
+
+    /// <summary>Thread.Sleep in short slices so Cancel() (DisposeAsync, page navigated away) lands promptly.</summary>
+    private void Sleep(TimeSpan delay, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        long end = Environment.TickCount64 + (long)delay.TotalMilliseconds;
+        while (Environment.TickCount64 < end)
+        {
+            token.ThrowIfCancellationRequested();
+            display?.Flush(); // a frame skipped by the 30 Hz cap still reaches the screen
+            Thread.Sleep((int)Math.Clamp(end - Environment.TickCount64, 0, 20));
+        }
+    }
+
+    private Task HandleKeyDownAsync(BrowserKeyEvent e)
+    {
+        string key = BrowserKeyboard.Encode(e);
+        if (key.Length > 0 && keys.Count < 1024) keys.Enqueue(key);
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        cts.Cancel();
+        if (gameTask is not null) { try { await gameTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
+    }
+}

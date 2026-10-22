@@ -1,0 +1,89 @@
+@page "/gorillas-bas"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using System.Collections.Concurrent
+@using QBSharp.Cli
+@using QBSharp.Core.Hosting
+@using QBSharp.Core.Syntax
+@using QBSharp.QBasic
+
+<PageTitle>Gorillas (.bas) — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-3 p-4">
+    <h1 class="text-xl font-bold text-pc-white">Gorillas — GORILLA.BAS</h1>
+    <p class="text-sm text-pc-gray">
+        The 1990 original (Copyright (C) Microsoft Corporation), run by the QBasic interpreter — the same
+        engine as <code class="text-pc-yellow">qbs run --dialect qbasic</code> with
+        <code class="text-pc-yellow">QBS_GRAPHICS=pixel</code>, just browser-hosted. No file access from this
+        page. Click the screen, then type.
+    </p>
+    <PixelDisplay @ref="display" OnKeyDown="HandleKeyDownAsync" />
+    <div class="flex flex-wrap items-center gap-4 text-sm">
+        <a href="/editor-monaco?file=GORILLA.BAS" class="text-pc-brightcyan underline hover:text-pc-yellow">Open GORILLA.BAS in Monaco</a>
+        <a href="/editor" class="text-pc-brightcyan underline hover:text-pc-yellow">Open in the QBasic Editor</a>
+    </div>
+    <details class="rounded border border-pc-darkgray p-3">
+        <summary class="cursor-pointer text-sm font-bold text-pc-white">The code (GORILLA.BAS)</summary>
+        <pre class="mt-2 max-h-[32rem] overflow-auto text-xs text-pc-gray">@listing</pre>
+    </details>
+</div>
+
+@code {
+    private PixelDisplay? display;
+    private string listing = "";
+
+    protected override void OnInitialized()
+        => listing = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "samples", "GORILLA.BAS")); // bundled read-only, see csproj
+    private readonly CancellationTokenSource cts = new();
+    private readonly ConcurrentQueue<string> keys = new();
+    private Task? runTask;
+
+    // Not OnInitialized: that runs before the first render, before <PixelDisplay @ref> is assigned.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) runTask = Task.Run(() => RunAsync(cts.Token));
+    }
+
+    private async Task RunAsync(CancellationToken token)
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "samples", "GORILLA.BAS"); // bundled read-only, see csproj
+        string source = await File.ReadAllTextAsync(path, token);
+        var engine = new QBasicEngine(new QBasicOptions
+        {
+            AllowFileIO = false, // this page needs no file access, closing that off entirely
+            MaximumSteps = QBasicRunPolicy.InteractiveMaximumSteps,
+            StepBudgetMode = QBasicStepBudgetMode.BetweenInputPolls,
+            InputPollingInterval = TimeSpan.FromMilliseconds(10),
+            // GORILLA.BAS's Rest waits MachSpeed * t / 500 seconds, MachSpeed counted by an empty loop: ~100x too
+            // long on this interpreter (a banana step took seconds). Scale its TIMER waits back to the intended t.
+            TimerWaitScale = QBasicRunPolicy.CalibratedTimerWaitScale,
+            ScreenInput = true, // one screen for text, graphics and INPUT echo, as the pixel window does
+            ReadKey = () => keys.TryDequeue(out var key) ? key : "",
+            Audio = async (tone, t) =>
+            {
+                display?.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds);
+                await Task.Delay(tone.Duration, t);
+            },
+            RefreshDisplay = () => display?.Flush(),
+            PresentText = cells => display?.PresentText(cells),
+            PresentGraphics = graphics => display?.PresentGraphics(graphics),
+        });
+        await using var session = engine.CreateSession();
+        try { await session.ExecuteAsync(new ScriptSource(source, "GORILLA.BAS"), token); }
+        catch (OperationCanceledException) { } // circuit disposed
+        catch (Exception) { } // a runtime diagnostic is already on the last presented screen
+    }
+
+    private Task HandleKeyDownAsync(BrowserKeyEvent e)
+    {
+        string key = BrowserKeyboard.Encode(e);
+        if (key.Length > 0 && keys.Count < 1024) keys.Enqueue(key);
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        cts.Cancel();
+        if (runTask is not null) { try { await runTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
+    }
+}

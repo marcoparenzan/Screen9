@@ -1,0 +1,3 @@
+﻿Dim x As Integer = 21
+x * 2
+:quit

@@ -1,0 +1,6 @@
+﻿Dim data = Json.Deserialize("{""Select"":42}")
+data.Select
+Yaml.Deserialize(Yaml.Serialize(data)).Select
+Ui.MessageBox("Non-interactive: no prompt", "QBSharp")
+Ui.Progress(100, "REPL")
+:quit

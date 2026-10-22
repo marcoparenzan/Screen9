@@ -1,0 +1,94 @@
+@page "/gorillas-csharp"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using System.Collections.Concurrent
+@using Gorilla
+
+<PageTitle>Gorillas (C#) — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-3 p-4">
+    <h1 class="text-xl font-bold text-pc-white">Gorillas — C#</h1>
+    <p class="text-sm text-pc-gray">
+        <code class="text-pc-yellow">samples/csharp/Gorilla</code>'s <code class="text-pc-yellow">GorillasGame</code>,
+        unchanged, hosted here instead of in a native pixel window. Click the screen, then type.
+    </p>
+    <PixelDisplay @ref="display" OnKeyDown="HandleKeyDownAsync" />
+    <details class="rounded border border-pc-darkgray p-3">
+        <summary class="cursor-pointer text-sm font-bold text-pc-white">The code (GorillasCore.cs)</summary>
+        <pre class="mt-2 max-h-[32rem] overflow-auto text-xs text-pc-gray">@listing</pre>
+    </details>
+</div>
+
+@code {
+    private PixelDisplay? display;
+    private string listing = "";
+
+    protected override void OnInitialized()
+        => listing = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "samples", "GorillasCore.cs")); // bundled read-only, see csproj
+    private readonly CancellationTokenSource cts = new();
+    private readonly ConcurrentQueue<string> keys = new();
+    private Task? gameTask;
+
+    // Not OnInitialized: that runs before the first render, before <PixelDisplay @ref> is assigned.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) gameTask = Task.Run(() => RunGame(cts.Token));
+    }
+
+    private void RunGame(CancellationToken token)
+    {
+        var host = new GorillasHost
+        {
+            Present = (graphics, cells) =>
+            {
+                if (display is null) return;
+                if (graphics is not null) display.PresentGraphics(graphics); else display.PresentText(cells);
+            },
+            ReadKey = () => keys.TryDequeue(out var key) ? key : "",
+            FlushKeys = () => { while (keys.TryDequeue(out _)) { } },
+            Sleep = delay => Sleep(delay, token),
+            // Mirrors the desktop host (GorillasDemo in Gorillas.cs): Tone blocks for the tone's duration
+            // either way (there via PCSpeaker.Beep, here via Sleep), so game pacing matches; the Web Audio
+            // call itself is fire-and-forget — the browser plays it independently for that same duration.
+            Tone = tone => { display?.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds); Sleep(tone.Duration, token); },
+            Background = tones => _ = Task.Run(async () =>
+            {
+                foreach (var tone in tones)
+                {
+                    token.ThrowIfCancellationRequested();
+                    display?.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds);
+                    await Task.Delay(tone.Duration, token);
+                }
+            }, token),
+            Seed = () => Random.Shared.Next(),
+        };
+        try { new GorillasGame(host).Run(); }
+        catch (OperationCanceledException) { } // circuit disposed
+    }
+
+    /// <summary>Thread.Sleep in short slices so Cancel() (DisposeAsync, page navigated away) lands promptly.</summary>
+    private void Sleep(TimeSpan delay, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        long end = Environment.TickCount64 + (long)delay.TotalMilliseconds;
+        while (Environment.TickCount64 < end)
+        {
+            token.ThrowIfCancellationRequested();
+            display?.Flush(); // a frame skipped by the 30 Hz cap still reaches the screen
+            Thread.Sleep((int)Math.Clamp(end - Environment.TickCount64, 0, 20));
+        }
+    }
+
+    private Task HandleKeyDownAsync(BrowserKeyEvent e)
+    {
+        string key = BrowserKeyboard.Encode(e);
+        if (key.Length > 0 && keys.Count < 1024) keys.Enqueue(key);
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        cts.Cancel();
+        if (gameTask is not null) { try { await gameTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
+    }
+}

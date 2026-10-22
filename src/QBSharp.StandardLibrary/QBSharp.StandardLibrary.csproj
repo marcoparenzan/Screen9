@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RestoreAdditionalProjectSources Condition="Exists('D:\dev\LocalNuGetFeed')">$(RestoreAdditionalProjectSources);D:\dev\LocalNuGetFeed</RestoreAdditionalProjectSources>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../QBSharp.Core/QBSharp.Core.csproj" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <ProjectReference Include="../Screen9/Screen9.csproj" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,12 @@
+﻿using System;
+using System.IO;
+var root=Directory.GetCurrentDirectory();
+File.AppendAllText(Path.Combine(root,"PROMPTS.md"),"\n## 41. Diagnostica framebuffer Gorillas\n> procedi; quindi?\nIntento: esportazione PNG originale per distinguere errori grafici da riduzione console; presenter pixel separato.\n");
+var path=Path.Combine(root,"src/QBSharp.Cli/CliApplication.cs");
+var text=File.ReadAllText(path);
+var before="PresentGraphics = interactive ? frame => {var size=canvasRenderer.GetViewportSize();";
+var after="PresentGraphics = interactive ? frame => {if(configuration?[\"QBS_FRAME_PNG\"] is { Length: > 0 } pngPath) FramebufferPng.Save(frame,pngPath,cancellationToken);var size=canvasRenderer.GetViewportSize();";
+if(!text.Contains(before))throw new Exception("Expected graphics callback not found");
+File.WriteAllText(path,text.Replace(before,after));
+File.AppendAllText(Path.Combine(root,"USAGE.md"),"\n## Diagnostica framebuffer originale\nIn CMD: `set QBS_FRAME_PNG=D:\\Temp\\gorilla-frame.png`, poi eseguire dal sorgente con `--dialect qbasic`. Il PNG viene aggiornato sui callback grafici interattivi, alla risoluzione nativa e dalla pagina visibile, senza riduzione a celle. Usare una cartella esistente. Questo percorso opt-in rallenta intenzionalmente il gioco: disabilitare con `set QBS_FRAME_PNG=` dopo la diagnosi. Non disponibile nell'editor.\n");
+File.AppendAllText(Path.Combine(root,"OPENPOINTS.md"),"\n## Diagnostica pixel\nAggiunta esportazione PNG opt-in nella CLI interattiva tramite QBS_FRAME_PNG. Presenter pixel in finestra, confronto visivo del framebuffer di Gorillas e partita completa restano aperti. Il tool globale non viene aggiornato in questo gate.\n");

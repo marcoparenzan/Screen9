@@ -1,0 +1,8 @@
+﻿Public Class Local
+    Property Value As Integer = 42
+End Class
+New Local().Value
+Import "samples/lib/models" As M
+Dim counter As M.Ops.Counter = New M.Ops.Counter(21)
+counter.Twice()
+:quit
