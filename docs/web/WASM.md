@@ -214,7 +214,7 @@ A task returned inside one of these is not awaited: the script sees the task obj
 
 Drawing on the canvas costs about 0.2 ms in every build. Other AOT results: Rally-X holds its 30 frames a second (29 draws measured over a second); Gorillas (C# and `.bas`) play normally; the Python game draws about 44 frames a second during a banana flight against a ceiling of about 50 (the game's own 20 ms step); `GORILLA.BAS` runs.
 
-**Interpreted vs AOT.** Without AOT the Mono runtime interprets the IL, which is about 25 times slower than the compiled code for this kind of loop; **a Release build does not fix it** (the numbers above are 22 vs 23–25). `RunAOTCompilation` only acts on `publish`, so `dotnet run` and Visual Studio always run interpreted. For anything where speed matters, use the published build (section 9).
+**Interpreted vs AOT.** Without AOT the Mono runtime interprets the IL, which is about 25 times slower than the compiled code for this kind of loop; **a Release build does not fix it** (the numbers above are 22 vs 23–25). `RunAOTCompilation` only acts on `publish`, so `dotnet run` and Visual Studio always run interpreted. For anything where speed matters, use the published build (section 9): `pwsh ops\run-site.ps1` does it in about 3 minutes.
 
 ### Download size
 
@@ -247,18 +247,59 @@ dotnet test  src\RallyX.Tests ; dotnet test src\Screen9.Tests
 dotnet run --project src\Screen9.Web\Screen9.Web.csproj    # works, but the browser programs are interpreted: slow
 ```
 
-### Run fast: a published (AOT) build
+### Run fast: `ops/run-site.ps1`
 
 ```powershell
-# once per machine
-dotnet workload install wasm-tools
+pwsh ops\run-site.ps1               # publish (only if a source changed) and run on http://localhost:5280
+pwsh ops\run-site.ps1 -NoPublish    # run what is already published
+pwsh ops\run-site.ps1 -Force        # publish even if nothing changed
+pwsh ops\run-site.ps1 -Port 5000 -Output D:\somewhere\site
+```
 
-# from the repository root
+The script installs the `wasm-tools` workload if it is missing, refuses to publish while a `Screen9.Web` is running (it locks `Screen9.Web.Client.dll`: `MSB3027`), **empties the output folder and the AOT intermediates**, publishes with the two local-use settings below, and starts the site.
+It skips the publish when no source file (`.cs`, `.razor`, `.csproj`, `.js`, `.css`, `.json`, `.nupkg`, samples) is newer than the published `Screen9.Web.dll`. The default output, `ops\artifacts\site`, is ignored by git; **the folder is emptied on every publish**, so do not keep anything in it.
+
+The two settings (passed as `-p:` properties; the project file keeps the defaults so a real deployment is unaffected):
+
+| Property | Default | Local | Effect |
+|---|---|---|---|
+| `CompressionEnabled` | `true` | `false` | no Brotli/gzip of the assets: **−55 s**; the published files are plain (a deployment should keep compression) |
+| `EmccLinkOptimizationFlag` | `-O2` | `-O1` | lighter final link: **84 s → 10 s**; `dotnet.native.wasm` grows from 22.4 to about 26 MB; the AOT-compiled code is the same (Plasma 60 fps, the Python banana flight 43–46 draws/s as with `-O2`, Rally-X ~25–29) |
+
+### Where the publish time goes
+
+Measured with `-clp:PerformanceSummary` on the development machine (the maintainer's machine, with fewer cores, took 518 s for a default cold publish):
+
+| Phase | Default publish | Local settings |
+|---|---|---|
+| Bitcode generation and compile of the assemblies for AOT (parallel, the bulk of a cold build) | ~130 s | ~130 s |
+| `MonoAOTCompiler` (generic-instance dedup, bookkeeping) | ~30 s | ~30 s |
+| Final link (`emcc`, `-O2`) | **84 s** | 10 s |
+| Brotli compression of the assets | **55 s** | 0 |
+| ILLink + `wasm-opt` | ~15 s | ~15 s |
+| **Total, cold** | ~300–340 s | **176–190 s** |
+
+The slowest single steps of a cold build are the generic-instance assembly (`aot-instances.dll`, 76 s), `PySharpLib` (63 s), `System.Private.CoreLib` (57 s), `System.Text.Json` (23 s) and `System.Text.RegularExpressions` (17 s); they run in parallel, so fewer cores means a longer build.
+
+### The AOT incremental cache is a trap
+
+The AOT compiler keeps a cache per assembly (`obj\Release\net10.0\wasm\for-publish\aot_compiler_cache.json`) and a second publish says *"skipped unchanged assemblies"* (67 of 76). It saves little (the link and the compression are not cached: a publish with **no change at all** still took 197 s)
+and it **produced a broken site**: after assemblies were added to the client (`QBSharp.StandardLibrary`, for the editor), publishes that reused the cache — with the default settings and with the local ones alike — built a site whose runtime would not start:
+`[MONO] ... aot-runtime.c:2146` then `MONO_WASM: mono_wasm_load_runtime () failed` and `Failed to start platform` in the browser console, and nothing on the page runs. Deleting `src\Screen9.Web.Client\obj\Release` fixed it. The cause is not proven (the likely one: the dedup assembly `aot-instances.dll` is regenerated while the cached assemblies expect the earlier instances).
+**Rule: delete `obj\Release` of the client before an AOT publish** (the script does). If a published site shows the page but no program runs, look for that message first.
+
+Not tried: leaving some assemblies interpreted (the SDK has an internal item for it, `_AOT_InternalForceInterpretAssemblies`), `WasmDedup=false`, and profile-guided AOT (`WasmAotProfilePath`: compile only what a profile says is hot).
+
+### Manual publish (and deployment settings)
+
+```powershell
+dotnet workload install wasm-tools                       # once per machine
 dotnet publish src\Screen9.Web\Screen9.Web.csproj -c Release -o ops\artifacts\site
 dotnet ops\artifacts\site\Screen9.Web.dll --urls http://localhost:5280
 ```
 
-Publishing takes from about 3½ minutes (the development machine) to 8½ (the maintainer's machine), because it compiles the whole runtime ahead of time. `ops\artifacts\` is ignored by git. Stop any running copy of the site first — **a running `Screen9.Web` (including the one Visual Studio starts) locks `Screen9.Web.Client.dll`** and the build or publish fails with `MSB3027`.
+Without the two local settings this is the build to deploy: compressed assets, full link optimisation. It takes from about 3½ to 9 minutes depending on the machine; remember to delete `obj\Release` first (see above). Stop any running copy of the site first.
+
 The published site runs in the `Production` environment by default and serves its files from `wwwroot` under the content root. `Program.cs` takes the content root from the working directory, **except** that if the working directory has no `wwwroot` but the folder of the DLL has one, it uses that (so the command above works from the repository root; it used to fail with *"wwwroot not found at ''"* unless you `cd` into the site folder first). It still fails fast if neither has one, and the working directory must not be changed before the host is built.
 
 ### Deploy
@@ -350,6 +391,7 @@ Headless virtual time (`--virtual-time-budget`) makes in-page seconds meaningles
 | `MSB3027` copying `Screen9.Web.Client.dll` | The site (or Visual Studio) is running and locks it. |
 | A game freezes the page after a long frame | A zero wait completed synchronously; `GameClock.Delay` must `Task.Yield()` for waits of zero or less. |
 | `wwwroot not found at ''` starting the published site | Started from a folder without `wwwroot` (fixed: the DLL's folder is used when the working directory has none); on an older build, `cd` into the site folder. |
+| Published site: the page appears but no program runs; console says `mono_wasm_load_runtime () failed`, `aot-runtime.c:2146` | A stale AOT cache after the set of assemblies changed. Delete `src\Screen9.Web.Client\obj\Release` and publish again (`ops/run-site.ps1` does). |
 | `dotnet run` is "very slow" | Interpreted WebAssembly. Publish (AOT); a Release build alone does not help (section 8). |
 | Python `sleep` freezes the page | The script ran through `Run`, not `RunAsync`, or the wait is in a place that does not suspend (section 6). |
 | Headless frame counters read 0 or nonsense | `--virtual-time-budget` distorts timers; measure in real time with a remote debugging port. |

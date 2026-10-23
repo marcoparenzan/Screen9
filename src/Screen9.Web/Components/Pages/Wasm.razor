@@ -107,13 +107,19 @@
     <section class="flex flex-col gap-3">
         <h2 class="text-xl font-bold text-pc-white">6 · Try it, and build it yourself</h2>
         <p class="text-sm">
-            <code class="text-pc-yellow">dotnet run</code> works but runs the interpreted build, so the programs feel slow. For the fast one, publish and run the result:
+            <code class="text-pc-yellow">dotnet run</code> works but runs the interpreted build, so the programs feel slow. For the fast one, publish and run the result with one command:
         </p>
-        <pre class="overflow-x-auto rounded border border-pc-darkgray p-3 text-xs text-pc-gray">dotnet workload install wasm-tools      # once per machine
-dotnet publish src\Screen9.Web\Screen9.Web.csproj -c Release -o ops\artifacts\site
-dotnet ops\artifacts\site\Screen9.Web.dll --urls http://localhost:5280</pre>
+        <pre class="overflow-x-auto rounded border border-pc-darkgray p-3 text-xs text-pc-gray">pwsh ops\run-site.ps1</pre>
         <p class="text-sm">
-            A publish takes from three and a half to nine minutes, depending on the machine. Stop any running copy of the site first: it locks the files the publish needs.
+            That script publishes with AOT, tuned for local use (no compression of the assets, a lighter final link), and starts the site on port 5280. It publishes again only if a source file changed.
+            A cold publish takes about three minutes on the development machine; the same publish done by hand, with the settings a real deployment needs, takes from three and a half to nine
+            minutes. Done by hand: <code class="text-pc-yellow">dotnet workload install wasm-tools</code> once, then
+            <code class="text-pc-yellow">dotnet publish src\Screen9.Web\Screen9.Web.csproj -c Release -o ops\artifacts\site</code>.
+        </p>
+        <p class="text-sm">
+            Where the time goes: the link at the end (84 s) and the compression of 30 MB of assets (55 s) cost as much as compiling the code. Both can be skipped for local use, and
+            the compiled code runs just as fast. One trap: the compiler's incremental cache can leave a site whose runtime will not start, so the script always starts from a clean one.
+            Stop any running copy of the site first: it locks the files the publish needs.
         </p>
     </section>
 

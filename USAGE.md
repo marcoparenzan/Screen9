@@ -48,7 +48,7 @@ dotnet run --project src/Screen9.Web -c Release
 ```
 
 The games and demos run in the browser (WebAssembly), but only an AOT build is fast: `dotnet run` interprets the .NET code (Plasma ~22 fps), `dotnet publish` compiles it (60 fps).
-One-off: `dotnet workload install wasm-tools`, then `dotnet publish src/Screen9.Web -c Release -o out` and run `dotnet out/Screen9.Web.dll` (details in [docs/web](docs/web/README.md)).
+The one-command way: `pwsh ops/run-site.ps1` (publishes with AOT, tuned for local use, only when a source changed, and starts the site on http://localhost:5280; about 3 minutes the first time). Done by hand: `dotnet workload install wasm-tools` once, then `dotnet publish src/Screen9.Web -c Release -o ops/artifacts/site` and `dotnet ops/artifacts/site/Screen9.Web.dll` (details in [docs/web/WASM.md](docs/web/WASM.md)).
 
 Open the printed address. Pages: Gorillas (C#, `.bas`, Python and C# script), Rally-X (`/rally-x`), the QBSharp editor (TUI) and a Monaco editor
 that picks the interpreter from the file extension (`.bas` QBSharp, `.py` PySharp; both run in your browser, `.csx` only on its server page). Click the screen before typing.
