@@ -29,7 +29,10 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment() && !Directory.Exists(app.Environment.WebRootPath))
     throw new InvalidOperationException($"wwwroot not found at '{app.Environment.WebRootPath}' (content root '{app.Environment.ContentRootPath}'). Was the working directory changed before the host was built?");
 
-if (!app.Environment.IsDevelopment())
+// The games run as WebAssembly in the browser: in Development the server also serves what the debugger needs to attach to them.
+if (app.Environment.IsDevelopment())
+    app.UseWebAssemblyDebugging();
+else
 {
     app.UseExceptionHandler("/error", createScopeForErrors: true);
     app.UseHsts();
