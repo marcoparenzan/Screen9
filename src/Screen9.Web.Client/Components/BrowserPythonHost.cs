@@ -61,8 +61,9 @@ public static class BrowserPython
             return Array.CreateInstance(clr.GetClrType(Int32), length)
         """;
 
-    /// <summary>Returns "Completed", "Canceled" or the Python error. Python output goes to <paramref name="output"/>, one line per call.</summary>
-    public static async Task<string> RunAsync(string source, string fileName, BrowserPythonHost host, Action<string> output)
+    /// <summary>Returns "Completed", "Canceled" or the Python error. Python output goes to <paramref name="output"/>, one line per call.
+    /// <paramref name="host"/> is the <c>web_host</c> variable: a <see cref="BrowserPythonHost"/> on a page, anything with the same members in a test.</summary>
+    public static async Task<string> RunAsync(string source, string fileName, object host, Action<string> output)
     {
         var writer = new LineWriter(output);
         var engine = new PyEngine(writer);

@@ -148,7 +148,7 @@ a `Task` (and `time.sleep`). It only re-implements what can contain a call (stat
 evaluator through the same helpers, so semantics cannot drift. Details and the list of what does *not* suspend (class bodies, `__init__`, comprehensions, f-strings,
 `match`, callbacks of builtins, generators and coroutines) are in PySharp's `ARCHITECTURE.md` §12d.
 
-On the Screen9 side: `BrowserPythonHost` is the `web_host` of `gorillas.py`, the same contract as the server's `PythonGameHost`, but `sleep` and `tone` **return a `Task`**
+On the Screen9 side: `BrowserPythonHost` is the `web_host` of `gorillas.py`, the same contract the desktop and the old server host had (`present`, `read_key`, `flush_keys`, `sleep`, `tone`, `background`, `seed`, `checkpoint`), but `sleep` and `tone` **return a `Task`**
 (`GameClock.Delay`) instead of blocking; `BrowserPython.RunAsync` builds the engine with the in-memory `screen9` module and calls `engine.RunAsync`; `PythonWasm` is the component
 (`PixelScreen` + status line + Python output). `gorillas.py` is the same file as on the desktop and on the server. Checked on the published (AOT) site in headless Edge: the intro (with its
 sparkles, which are `sleep`s), names, a shot with the banana in flight — about 44 canvas draws a second during the flight, against a ceiling of about 50 (the game's own 20 ms step).

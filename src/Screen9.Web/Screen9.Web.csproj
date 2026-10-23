@@ -17,8 +17,6 @@
     <ProjectReference Include="../../samples/csharp/RallyX/RallyXCore.csproj" />
     <ProjectReference Include="../../samples/csharp/Demos/Core/Screen9.DemosCore.csproj" />
     <ProjectReference Include="../Screen9.Scripting/Screen9.Scripting.csproj" />
-    <!-- PySharp (Python in C#), from ../../LocalFeed (see LocalFeed/README.md), for the Python Gorillas page. -->
-    <PackageReference Include="PySharp.Interpreter" Version="2.6.0" />
   </ItemGroup>
 
   <!-- Bundled, read-only samples for the "just play"/preload pages and the editor's starting file. -->
