@@ -8,7 +8,10 @@ public sealed class RallyXHost
 {
     public required Action<PCCanvas> Present { get; init; }
     public required Func<string> ReadKey { get; init; }
-    public required Action<TimeSpan> Sleep { get; init; }
+    /// <summary>Blocking wait, for hosts with a thread to spare (desktop window, tests).</summary>
+    public Action<TimeSpan> Sleep { get; init; } = Thread.Sleep;
+    /// <summary>Non-blocking wait, for hosts without one (a browser): when set, the game awaits it instead of calling Sleep.</summary>
+    public Func<TimeSpan, ValueTask>? Delay { get; init; }
     public Action<IReadOnlyList<PCTone>> Sound { get; init; } = _ => { };
     public Func<int> Seed { get; init; } = () => Environment.TickCount;
     public RallyXAssets? Assets { get; init; }
@@ -47,17 +50,21 @@ public sealed class RallyXGame
     }
 
     /// <summary>Title, match, title... until Esc on the title screen (or the requested frames run out).</summary>
-    public void Run()
+    public void Run() => RunAsync().AsTask().GetAwaiter().GetResult();
+
+    /// <summary>Same as <see cref="Run"/>, awaiting <see cref="RallyXHost.Delay"/> at the end of every frame; with no Delay
+    /// every wait is synchronous and this completes before returning.</summary>
+    public async ValueTask RunAsync()
     {
         while (!stopped)
         {
-            if (!host.Demo && !Title()) return;
-            Play();
+            if (!host.Demo && !await Title()) return;
+            await Play();
             if (host.Demo) return;
         }
     }
 
-    private bool Title()
+    private async ValueTask<bool> Title()
     {
         SetPalette(assets.TitlePalette);
         host.Checkpoint?.Invoke("title", this);
@@ -71,12 +78,12 @@ public sealed class RallyXGame
             }
             Show(renderer.RenderTitle(HighScore, showPrompt: frame / 15 % 2 == 0));
             if (host.MaxFrames is { } max && FramesPresented >= max) stopped = true;
-            EndFrame();
+            await EndFrame();
         }
         return false;
     }
 
-    private void Play()
+    private async ValueTask Play()
     {
         SetPalette(assets.GamePalette);
         var sim = new RallyXSim(assets, host.Seed());
@@ -110,7 +117,7 @@ public sealed class RallyXGame
             LastScore = sim.Score; LastRound = sim.Round;
             Show(renderer.RenderGame(sim, Math.Max(HighScore, sim.Score), paused));
             if (host.MaxFrames is { } max && FramesPresented >= max) stopped = true;
-            EndFrame();
+            await EndFrame();
         }
         Leave(sim);
         if (sim.Finished) host.Checkpoint?.Invoke("gameover", this);
@@ -141,10 +148,12 @@ public sealed class RallyXGame
     private void BeginFrame() => frameStart = clock.Elapsed;
 
     /// <summary>Sleeps the rest of the frame (1/30 s minus what has already passed): pacing belongs to the game, the host decides how to sleep.</summary>
-    private void EndFrame()
+    private ValueTask EndFrame()
     {
         var remaining = TimeSpan.FromSeconds(1.0 / FramesPerSecond) - (clock.Elapsed - frameStart);
-        host.Sleep(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
+        if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+        if (host.Delay is { } delay) return delay(remaining);
+        host.Sleep(remaining); return default;
     }
 
     private void OnSound(RallyXSound sound)

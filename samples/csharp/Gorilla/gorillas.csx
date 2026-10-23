@@ -15,8 +15,13 @@ public sealed class GorillasHost
     public required Action<PCCanvas?, Canvas> Present { get; init; }
     public required Func<string> ReadKey { get; init; }
     public required Action FlushKeys { get; init; }
-    public required Action<TimeSpan> Sleep { get; init; }
-    public required Action<PCTone> Tone { get; init; }
+    /// <summary>Blocking wait, for hosts with a thread to spare (desktop window, tests).</summary>
+    public Action<TimeSpan> Sleep { get; init; } = Thread.Sleep;
+    /// <summary>Non-blocking wait, for hosts without one (a browser): when set, the game awaits it instead of calling Sleep.</summary>
+    public Func<TimeSpan, ValueTask>? Delay { get; init; }
+    public Action<PCTone> Tone { get; init; } = _ => { };
+    /// <summary>Plays one tone and completes when it is over; when set, used instead of Tone.</summary>
+    public Func<PCTone, ValueTask>? ToneAsync { get; init; }
     public Action<IReadOnlyList<PCTone>> Background { get; init; } = _ => { };
     public Func<int> Seed { get; init; } = () => Environment.TickCount;
     public Action<string, GorillasGame>? Checkpoint { get; init; }
@@ -54,12 +59,15 @@ public sealed class GorillasGame(GorillasHost host)
     public Canvas TextCells => text.Cells;
     public PCCanvas? Graphics => graphics;
 
-    public void Run()
+    /// <summary>Plays to the end on the calling thread (with a host that has no Delay every wait is synchronous).</summary>
+    public void Run() => RunAsync().AsTask().GetAwaiter().GetResult();
+
+    public async ValueTask RunAsync()
     {
-        Intro();
-        GetInputs(out string name1, out string name2, out int numGames);
-        GorillaIntro(name1, name2);
-        PlayGame(name1, name2, numGames);
+        await Intro();
+        var (name1, name2, numGames) = await GetInputs();
+        await GorillaIntro(name1, name2);
+        await PlayGame(name1, name2, numGames);
     }
 
     // ---- Istruzioni QBasic ---------------------------------------------------------------------------------------------
@@ -93,18 +101,28 @@ public sealed class GorillasGame(GorillasHost host)
     }
     private void Paint(int x, int y, int color, int border) => G.Paint(x, y, color, border);
     /// <summary>PLAY: MB/MF persistono tra le chiamate come in QBasic; la musica di sottofondo non ferma il gioco.</summary>
-    private void Play(string source)
+    private async ValueTask Play(string source)
     {
         var tones = music.Parse(source);
         if (tones.Count > 0 && tones[0].Background) { host.Background(tones); return; }
-        foreach (var tone in tones) host.Tone(tone);
+        foreach (var tone in tones) await PlayTone(tone);
+    }
+    private ValueTask PlayTone(PCTone tone)
+    {
+        if (host.ToneAsync is { } toneAsync) return toneAsync(tone);
+        host.Tone(tone); return default;
+    }
+    private ValueTask Wait(TimeSpan time)
+    {
+        if (host.Delay is { } delay) return delay(time);
+        host.Sleep(time); return default;
     }
     private string Inkey() => host.ReadKey();
-    private string WaitKey() { string key; while ((key = Inkey()) == "") Frame(15); return key; }
+    private async ValueTask<string> WaitKey() { string key; while ((key = Inkey()) == "") await Frame(15); return key; }
     private void Present() => host.Present(graphics, text.Cells);
-    private void Frame(int milliseconds) { Present(); host.Sleep(TimeSpan.FromMilliseconds(milliseconds)); }
+    private ValueTask Frame(int milliseconds) { Present(); return Wait(TimeSpan.FromMilliseconds(milliseconds)); }
     /// <summary>Rest: in GORILLA.BAS dipende da CalcDelay; qui è il tempo nominale.</summary>
-    private void Rest(double seconds) { Present(); host.Sleep(TimeSpan.FromSeconds(seconds)); }
+    private ValueTask Rest(double seconds) { Present(); return Wait(TimeSpan.FromSeconds(seconds)); }
 
     private static int CInt(double value) => (int)Math.Round(value, MidpointRounding.ToEven); // CINT e assegnazioni a INTEGER
     private static int Scl(double n) => CInt(n);                                               // ramo EGA di Scl
@@ -117,7 +135,7 @@ public sealed class GorillasGame(GorillasHost host)
     }
 
     // ---- Schermate di testo --------------------------------------------------------------------------------------------
-    private void Intro()
+    private async ValueTask Intro()
     {
         Screen(0); maxCol = 80; Color(15, 0); Cls();
         Center(4, "Q B a s i c    G O R I L L A S");
@@ -129,11 +147,11 @@ public sealed class GorillasGame(GorillasHost host)
         Center(11, "The wind speed is shown by a directional arrow at the bottom");
         Center(12, "of the playing field, its length relative to its strength.");
         Center(24, "Press any key to continue");
-        Play("MBT160O1L8CDEDCDL4ECC");
-        SparklePause();
+        await Play("MBT160O1L8CDEDCDL4ECC");
+        await SparklePause();
     }
 
-    private void SparklePause()
+    private async ValueTask SparklePause()
     {
         Color(4, 0);
         const string sparkles = "*    *    *    *    *    *    *    *    *    *    *    *    *    *    *    *    *    ";
@@ -149,19 +167,19 @@ public sealed class GorillasGame(GorillasHost host)
                     string mark = (a + b) % 5 == 1 ? "*" : " ";
                     Locate(b, 80); Print(mark); Locate(23 - b, 1); Print(mark);
                 }
-                Frame(40);
+                await Frame(40);
             }
         }
     }
 
     /// <summary>LINE INPUT / INPUT con eco e cursore "_"; INPUT aggiunge "? " al prompt.</summary>
-    private string LineInput(string prompt, int maxLength = 30)
+    private async ValueTask<string> LineInput(string prompt, int maxLength = 30)
     {
         Print(prompt); int row = text.Row, column = text.Column; var value = new StringBuilder();
         while (true)
         {
             Locate(row, column); Print(value + "_ ");
-            string key = WaitKey();
+            string key = await WaitKey();
             if (key == "\r") break;
             if (key == "\b") { if (value.Length > 0) value.Length--; }
             else if (key.Length == 1 && key[0] >= ' ' && value.Length < maxLength) value.Append(key);
@@ -170,18 +188,19 @@ public sealed class GorillasGame(GorillasHost host)
         return value.ToString();
     }
 
-    private void GetInputs(out string player1, out string player2, out int numGames)
+    private async ValueTask<(string Player1, string Player2, int NumGames)> GetInputs()
     {
+        string player1, player2; int numGames;
         Color(7, 0); Cls();
-        Locate(8, 15); player1 = LineInput("Name of Player 1 (Default = 'Player 1'): ");
+        Locate(8, 15); player1 = await LineInput("Name of Player 1 (Default = 'Player 1'): ");
         player1 = player1 == "" ? "Player 1" : player1[..Math.Min(10, player1.Length)];
-        Locate(10, 15); player2 = LineInput("Name of Player 2 (Default = 'Player 2'): ");
+        Locate(10, 15); player2 = await LineInput("Name of Player 2 (Default = 'Player 2'): ");
         player2 = player2 == "" ? "Player 2" : player2[..Math.Min(10, player2.Length)];
         string game;
         do
         {
             Locate(12, 56); Print(new string(' ', 25));
-            Locate(12, 13); game = LineInput("Play to how many total points (Default = 3)? ", 5);
+            Locate(12, 13); game = await LineInput("Play to how many total points (Default = 3)? ", 5);
             numGames = CInt(Val(game[..Math.Min(2, game.Length)]));
         } while (!(numGames > 0 && game.Length < 3 || game.Length == 0));
         if (numGames == 0) numGames = 3;
@@ -189,19 +208,20 @@ public sealed class GorillasGame(GorillasHost host)
         do
         {
             Locate(14, 53); Print(new string(' ', 28));
-            Locate(14, 17); grav = LineInput("Gravity in Meters/Sec (Earth = 9.8)? ", 8);
+            Locate(14, 17); grav = await LineInput("Gravity in Meters/Sec (Earth = 9.8)? ", 8);
             gravity = Val(grav);
         } while (!(gravity > 0 || grav.Length == 0));
         if (gravity == 0) gravity = 9.8;
+        return (player1, player2, numGames);
     }
 
-    private void GorillaIntro(string player1, string player2)
+    private async ValueTask GorillaIntro(string player1, string player2)
     {
         Locate(16, 34); Print("--------------", true);
         Locate(18, 34); Print("V = View Intro", true);
         Locate(19, 34); Print("P = Play Game", true);
         Locate(21, 35); Print("Your Choice?", true);
-        string choice = WaitKey();
+        string choice = await WaitKey();
         int x = 278, y = 175;
         Screen(9); SetScreen();
         ViewPrint(9, 24);
@@ -215,15 +235,15 @@ public sealed class GorillasGame(GorillasHost host)
         Center(2, "Q B A S I C   G O R I L L A S");
         Center(5, "             STARRING:               ");
         Center(7, player1 + " AND " + player2);
-        Put(gorD, x - 13, y); Put(gorD, x + 47, y); Rest(1);
-        Put(gorL, x - 13, y); Put(gorR, x + 47, y); Play("t120o1l16b9n0baan0bn0bn0baaan0b9n0baan0b"); Rest(.3);
-        Put(gorR, x - 13, y); Put(gorL, x + 47, y); Play("o2l16e-9n0e-d-d-n0e-n0e-n0e-d-d-d-n0e-9n0e-d-d-n0e-"); Rest(.3);
-        Put(gorL, x - 13, y); Put(gorR, x + 47, y); Play("o2l16g-9n0g-een0g-n0g-n0g-eeen0g-9n0g-een0g-"); Rest(.3);
-        Put(gorR, x - 13, y); Put(gorL, x + 47, y); Play("o2l16b9n0baan0g-n0g-n0g-eeen0o1b9n0baan0b"); Rest(.3);
+        Put(gorD, x - 13, y); Put(gorD, x + 47, y); await Rest(1);
+        Put(gorL, x - 13, y); Put(gorR, x + 47, y); await Play("t120o1l16b9n0baan0bn0bn0baaan0b9n0baan0b"); await Rest(.3);
+        Put(gorR, x - 13, y); Put(gorL, x + 47, y); await Play("o2l16e-9n0e-d-d-n0e-n0e-n0e-d-d-d-n0e-9n0e-d-d-n0e-"); await Rest(.3);
+        Put(gorL, x - 13, y); Put(gorR, x + 47, y); await Play("o2l16g-9n0g-een0g-n0g-n0g-eeen0g-9n0g-een0g-"); await Rest(.3);
+        Put(gorR, x - 13, y); Put(gorL, x + 47, y); await Play("o2l16b9n0baan0g-n0g-n0g-eeen0o1b9n0baan0b"); await Rest(.3);
         for (int i = 1; i <= 4; i++)
         {
-            Put(gorL, x - 13, y); Put(gorR, x + 47, y); Play("T160O0L32EFGEFDC"); Rest(.1);
-            Put(gorR, x - 13, y); Put(gorL, x + 47, y); Play("T160O0L32EFGEFDC"); Rest(.1);
+            Put(gorL, x - 13, y); Put(gorR, x + 47, y); await Play("T160O0L32EFGEFDC"); await Rest(.1);
+            Put(gorR, x - 13, y); Put(gorL, x + 47, y); await Play("T160O0L32EFGEFDC"); await Rest(.1);
         }
     }
 
@@ -337,7 +357,7 @@ public sealed class GorillasGame(GorillasHost host)
     }
 
     // ---- Gioco ---------------------------------------------------------------------------------------------------------
-    private void PlayGame(string player1, string player2, int numGames)
+    private async ValueTask PlayGame(string player1, string player2, int numGames)
     {
         var bcoor = new (int X, int Y)[31]; var totalWins = new int[3]; int j = 1;
         for (int round = 1; round <= numGames; round++)
@@ -352,11 +372,11 @@ public sealed class GorillasGame(GorillasHost host)
                 Locate(1, maxCol - 1 - player2.Length); Print(player2, true);
                 Center(23, $"{totalWins[1]}>Score<{totalWins[2]}");
                 int tosser = j + 1;
-                hit = DoShot(ref tosser, gorillaX[tosser], gorillaY[tosser]); // QBasic passa per riferimento: DoShot può cambiare tosser
+                (hit, tosser) = await DoShot(tosser, gorillaX[tosser], gorillaY[tosser]); // QBasic passa per riferimento: DoShot può cambiare tosser
                 if (sunHit) DoSun(SUNHAPPY);
                 if (hit) UpdateScores(totalWins, tosser, -1);
             }
-            Rest(1); // SLEEP 1
+            await Rest(1); // SLEEP 1
         }
         FinalScore = (totalWins[1], totalWins[2]);
 
@@ -367,28 +387,28 @@ public sealed class GorillasGame(GorillasHost host)
         Locate(12, 30); Print(player2); Locate(12, 50); Print($" {totalWins[2]} ", true);
         Center(24, "Press any key to continue");
         Present(); host.Checkpoint?.Invoke("gameover", this);
-        SparklePause();
+        await SparklePause();
         Color(7, 0); Cls(); Present();
     }
 
-    private bool DoShot(ref int playerNum, int x, int y)
+    private async ValueTask<(bool Hit, int PlayerNum)> DoShot(int playerNum, int x, int y)
     {
         int locateCol = playerNum == 1 ? 1 : 66;
         Locate(2, locateCol); Print("Angle:");
-        double angle = GetNum(2, locateCol + 7);
+        double angle = await GetNum(2, locateCol + 7);
         Locate(3, locateCol); Print("Velocity:");
-        int velocity = CInt(GetNum(3, locateCol + 10));
+        int velocity = CInt(await GetNum(3, locateCol + 10));
         if (playerNum == 2) angle = 180 - angle;
         for (int i = 1; i <= 4; i++) { Locate(i, 1); Print(new string(' ', 30 / (80 / maxCol))); Locate(i, 50 / (80 / maxCol)); Print(new string(' ', 30 / (80 / maxCol))); }
         sunHit = false;
-        int playerHit = PlotShot(x, y, angle, velocity, playerNum);
-        if (playerHit == 0) return false;
+        int playerHit = await PlotShot(x, y, angle, velocity, playerNum);
+        if (playerHit == 0) return (false, playerNum);
         if (playerHit == playerNum) playerNum = 3 - playerNum;
-        VictoryDance(playerNum);
-        return true;
+        await VictoryDance(playerNum);
+        return (true, playerNum);
     }
 
-    private double GetNum(int row, int col)
+    private async ValueTask<double> GetNum(int row, int col)
     {
         string result = ""; bool done = false;
         host.FlushKeys();
@@ -396,24 +416,24 @@ public sealed class GorillasGame(GorillasHost host)
         {
             Locate(row, col); Print(result + "_    ");
             string key = Inkey();
-            if (key == "") { Frame(15); continue; }
+            if (key == "") { await Frame(15); continue; }
             if (key.Length == 1 && char.IsAsciiDigit(key[0])) result += key;
             else if (key == ".") { if (!result.Contains('.')) result += key; }
             else if (key == "\r") { if (Val(result) > 360) result = ""; else done = true; }
             else if (key == "\b") { if (result.Length > 0) result = result[..^1]; }
-            else host.Tone(new PCTone(800, TimeSpan.FromMilliseconds(200))); // BEEP
+            else await PlayTone(new PCTone(800, TimeSpan.FromMilliseconds(200))); // BEEP
         }
         Locate(row, col); Print(result + " ");
         return Val(result);
     }
 
-    private int PlotShot(int startX, int startY, double angle, int velocity, int playerNum)
+    private async ValueTask<int> PlotShot(int startX, int startY, double angle, int velocity, int playerNum)
     {
         angle = angle / 180 * Math.PI;
         double initXVel = Math.Cos(angle) * velocity, initYVel = Math.Sin(angle) * velocity;
         double oldx = startX, oldy = startY;
         Put(playerNum == 1 ? gorL : gorR, startX, startY);
-        Play("MBo0L32A-L64CL16BL64A+"); Rest(.1);
+        await Play("MBo0L32A-L64CL16BL64A+"); await Rest(.1);
         Put(gorD, startX, startY);
         int adjust = Scl(4);
         bool impact = false, shotInSun = false, onScreen = true, needErase = false;
@@ -423,7 +443,7 @@ public sealed class GorillasGame(GorillasHost host)
         if (velocity < 2) { x = startX; y = startY; pointval = OBJECTCOLOR; } // troppo lento: colpisce se stesso
         while (!impact && onScreen)
         {
-            Rest(.02);
+            await Rest(.02);
             if (needErase) { needErase = false; DrawBan(oldx, oldy, oldrot, false); }
             x = startXPos + initXVel * t + .5 * (wind / 5.0) * t * t;
             y = startYPos + (-1 * (initYVel * t) + .5 * gravity * t * t) * (ScrHeight / 350.0);
@@ -452,36 +472,36 @@ public sealed class GorillasGame(GorillasHost host)
             }
             t += .1;
         }
-        if (pointval != OBJECTCOLOR && impact) DoExplosion(x + adjust, y + adjust);
-        else if (pointval == OBJECTCOLOR) playerHit = ExplodeGorilla(x);
+        if (pointval != OBJECTCOLOR && impact) await DoExplosion(x + adjust, y + adjust);
+        else if (pointval == OBJECTCOLOR) playerHit = await ExplodeGorilla(x);
         return playerHit;
     }
 
-    private void DoExplosion(double x, double y)
+    private async ValueTask DoExplosion(double x, double y)
     {
-        Play("MBO0L32EFGEFDC");
+        await Play("MBO0L32EFGEFDC");
         int radius = ScrHeight / 50; const double Inc = .5;
-        for (double c = 0; c <= radius; c += Inc) { Circle(x, y, c, ExplosionColor); Frame(4); }
-        for (double c = radius; c >= 0; c -= Inc) { Circle(x, y, c, BACKATTR); Rest(.005); }
+        for (double c = 0; c <= radius; c += Inc) { Circle(x, y, c, ExplosionColor); await Frame(4); }
+        for (double c = radius; c >= 0; c -= Inc) { Circle(x, y, c, BACKATTR); await Rest(.005); }
     }
 
-    private int ExplodeGorilla(double x)
+    private async ValueTask<int> ExplodeGorilla(double x)
     {
         int yAdj = Scl(12), xAdj = Scl(5); const double SclX = ScrWidth / 320.0, SclY = ScrHeight / 200.0;
         int playerHit = x < ScrWidth / 2.0 ? 1 : 2;
         int gx = gorillaX[playerHit], gy = gorillaY[playerHit];
-        Play("MBO0L16EFGEFDC");
+        await Play("MBO0L16EFGEFDC");
         for (int i = 1; i <= 8 * SclX; i++)
         {
             Circle(gx + 3.5 * SclX + xAdj, gy + 7 * SclY + yAdj, i, ExplosionColor, aspect: -1.57);
-            Line(gx + 7 * SclX, gy + 9 * SclY - i, gx, gy + 9 * SclY - i, ExplosionColor); Frame(8);
+            Line(gx + 7 * SclX, gy + 9 * SclY - i, gx, gy + 9 * SclY - i, ExplosionColor); await Frame(8);
         }
         for (int i = 1; i <= 16 * SclX; i++)
         {
             if (i < 8 * SclX) Circle(gx + 3.5 * SclX + xAdj, gy + 7 * SclY + yAdj, 8 * SclX + 1 - i, BACKATTR, aspect: -1.57);
-            Circle(gx + 3.5 * SclX + xAdj, gy + yAdj, i, i % 2 + 1, aspect: -1.57); Frame(8);
+            Circle(gx + 3.5 * SclX + xAdj, gy + yAdj, i, i % 2 + 1, aspect: -1.57); await Frame(8);
         }
-        for (int i = CInt(24 * SclX); i >= 1; i--) { Circle(gx + 3.5 * SclX + xAdj, gy + yAdj, i, BACKATTR, aspect: -1.57); Frame(6); }
+        for (int i = CInt(24 * SclX); i >= 1; i--) { Circle(gx + 3.5 * SclX + xAdj, gy + yAdj, i, BACKATTR, aspect: -1.57); await Frame(6); }
         return playerHit;
     }
 
@@ -490,12 +510,12 @@ public sealed class GorillasGame(GorillasHost host)
         if (results == HITSELF) record[Math.Abs(playerNum - 3)]++; else record[playerNum]++;
     }
 
-    private void VictoryDance(int player)
+    private async ValueTask VictoryDance(int player)
     {
         for (int i = 1; i <= 4; i++)
         {
-            Put(gorL, gorillaX[player], gorillaY[player]); Play("MFO0L32EFGEFDC"); Rest(.2);
-            Put(gorR, gorillaX[player], gorillaY[player]); Play("MFO0L32EFGEFDC"); Rest(.2);
+            Put(gorL, gorillaX[player], gorillaY[player]); await Play("MFO0L32EFGEFDC"); await Rest(.2);
+            Put(gorR, gorillaX[player], gorillaY[player]); await Play("MFO0L32EFGEFDC"); await Rest(.2);
         }
     }
 }
