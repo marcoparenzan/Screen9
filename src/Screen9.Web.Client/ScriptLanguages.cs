@@ -1,6 +1,7 @@
 namespace Screen9.Web;
 
-/// <summary>The interpreters the Monaco editor can run a file on, chosen by its extension.</summary>
+/// <summary>The interpreters the Monaco editor can run a file on, chosen by its extension. <c>.bas</c> and <c>.py</c> run in the
+/// browser; <c>.csx</c> is recognised (highlighting, the file list) but only the server page can run it.</summary>
 public enum ScriptLanguage
 {
     /// <summary>QBSharp: classic QBasic or the modern dialect (<c>.bas</c>).</summary>
@@ -34,14 +35,7 @@ public static class ScriptLanguages
     public static string Display(ScriptLanguage language) => language switch
     {
         ScriptLanguage.Python => "Python (PySharp)",
-        ScriptLanguage.CSharp => "C# script (Roslyn)",
-        _ => "QBasic / QBS",
+        ScriptLanguage.CSharp => "C# script (server only)",
+        _ => "QBasic",
     };
-
-    /// <summary>The user's own Python and C# run in this server process with its permissions (files, processes,
-    /// network): fine on a developer machine, never on a public host. Allowed in the Development environment, or
-    /// explicitly with <c>Screen9:AllowServerCode=true</c>. QBasic is sandboxed by the interpreter and always allowed;
-    /// the bundled Gorillas pages run fixed code and are not affected.</summary>
-    public static bool ServerCodeAllowed(bool isDevelopment, string? configured)
-        => bool.TryParse(configured, out bool explicitly) ? explicitly : isDevelopment;
 }

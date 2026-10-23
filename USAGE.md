@@ -51,9 +51,8 @@ The games and demos run in the browser (WebAssembly), but only an AOT build is f
 One-off: `dotnet workload install wasm-tools`, then `dotnet publish src/Screen9.Web -c Release -o out` and run `dotnet out/Screen9.Web.dll` (details in [docs/web](docs/web/README.md)).
 
 Open the printed address. Pages: Gorillas (C#, `.bas`, Python and C# script), Rally-X (`/rally-x`), the QBSharp editor (TUI) and a Monaco editor
-that picks the interpreter from the file extension (`.bas` QBSharp, `.py` PySharp, `.csx` C# scripting). Click the screen before typing.
-Python and C# written in Monaco run inside the server process, so they are enabled only in the `Development` environment or with
-`Screen9:AllowServerCode=true`; do not enable it on a public host.
+that picks the interpreter from the file extension (`.bas` QBSharp, `.py` PySharp; both run in your browser, `.csx` only on its server page). Click the screen before typing.
+Nothing you write in the editor runs on the server, so there is no setting to enable for it.
 
 ## Use the engine from your own C# code
 

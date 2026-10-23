@@ -1,8 +1,5 @@
-@* A QBasic program on the QBSharp interpreter, running in the browser. The engine is async end to end (INKEY$ polls and
-   TIMER waits await a delay instead of spinning), so it shares the one browser thread with painting and keys. *@
+@* A QBasic program on the QBSharp interpreter, running in the browser (see BrowserBasic). *@
 @implements IDisposable
-@using QBSharp.Core.Hosting
-@using QBSharp.QBasic
 
 <PixelScreen @ref="screen" />
 
@@ -18,45 +15,7 @@
     {
         if (!firstRender || screen is null) return;
         await screen.Ready;
-        var token = cts.Token;
-        try
-        {
-            double timerWaitScale = await CalibrateAsync();
-            var engine = new QBasicEngine(new QBasicOptions
-            {
-                AllowFileIO = false, // no file access from a web page
-                MaximumSteps = 10_000_000,
-                StepBudgetMode = QBasicStepBudgetMode.BetweenInputPolls,
-                InputPollingInterval = TimeSpan.FromMilliseconds(10),
-                // QBasic-era games time their pauses by counting empty-loop iterations (GORILLA.BAS: CalcDelay); this
-                // interpreter runs that loop far faster than a 1990 PC, so scale the TIMER waits back to their intended length.
-                TimerWaitScale = timerWaitScale,
-                ScreenInput = true, // one screen for text, graphics and INPUT echo, as the pixel window does
-                ReadKey = screen.ReadKey,
-                Audio = async (tone, t) =>
-                {
-                    screen.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds);
-                    await Task.Delay(tone.Duration, t);
-                },
-                PresentText = cells => screen.PresentText(cells),
-                PresentGraphics = graphics => screen.PresentGraphics(graphics),
-            });
-            await using var session = engine.CreateSession();
-            await session.ExecuteAsync(new ScriptSource(Source, FileName), token);
-        }
-        catch (OperationCanceledException) { } // page left
-        catch (Exception) { } // a runtime diagnostic is already on the last presented screen
-    }
-
-    /// <summary>Empty-loop iterations per half second that QBasic-era programs were tuned for: GORILLA.BAS's SPEEDCONST (500)
-    /// is the value at which its Rest(t) lasts t seconds. Measured once, here, on this machine, the way the server does.</summary>
-    private static async Task<double> CalibrateAsync()
-    {
-        await Task.Yield(); // let the first frame of the page paint before the half second of measuring
-        await using var session = new QBasicEngine(new QBasicOptions { MaximumSteps = 100_000_000, AllowFileIO = false }).CreateSession();
-        await session.ExecuteAsync(new ScriptSource("result=CalcDelay\nFUNCTION CalcDelay!\ns!=TIMER\nDO\ni!=i!+1\nLOOP UNTIL TIMER-s!>=.5\nCalcDelay!=i!\nEND FUNCTION", "calibrate.bas"));
-        double loops = Convert.ToDouble(session.Variables["result"], System.Globalization.CultureInfo.InvariantCulture);
-        return loops <= 0 ? 1 : Math.Clamp(500 / loops, 0.0001, 1);
+        await BrowserBasic.RunAsync(Source, FileName, screen, _ => { }, cts.Token); // a runtime diagnostic is already on the last presented screen
     }
 
     public void Dispose() => cts.Cancel();

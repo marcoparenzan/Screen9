@@ -30,7 +30,7 @@ public static class SiteNavigation
             new("Gorillas — Python (PySharp)", "/gorillas-python"),
             new("Gorillas — C# script (.csx)", "/gorillas-csx"),
             new("QBasic Editor", "/editor"),
-            new("Monaco Editor", "/editor-monaco", "Runs .bas, .py and .csx"),
+            new("Monaco Editor", "/editor-monaco", "Runs .bas and .py in your browser"),
         ]),
         new("C# Games",
         [

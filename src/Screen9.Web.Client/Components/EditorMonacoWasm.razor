@@ -1,0 +1,307 @@
+@* The Monaco editor, entirely in the browser: the files live in the page (and in this browser's localStorage), and Run executes the
+   editor's text with the runtime chosen by the extension (.bas on QBSharp, .py on PySharp) on a screen below the editor. Nothing the
+   user writes reaches the server. C# script (.csx) needs Roslyn and stays on the server (/gorillas-csx). *@
+@implements IAsyncDisposable
+@using System.Text.Json
+@using Screen9.Web
+@inject IJSRuntime JS
+
+<div class="flex flex-wrap items-center gap-2 text-sm">
+    <select value="@currentFile" @onchange="OnFileSelectedAsync" class="rounded border border-pc-darkgray bg-pc-black px-2 py-1 text-pc-white">
+        @foreach (var file in files.Keys)
+        {
+            <option value="@file">@file</option>
+        }
+    </select>
+    <button @onclick="SaveAsync" class="rounded bg-pc-darkgray px-3 py-1 text-white hover:bg-pc-blue" title="Keep the files in this browser (localStorage); Run uses the editor's text anyway">Save</button>
+    <input @bind="newFileName" @bind:event="oninput" @onkeydown="OnNewFileKeyDown" placeholder="new.py or .bas"
+           class="w-44 rounded border border-pc-darkgray bg-pc-black px-2 py-1 text-pc-white" />
+    <button @onclick="NewFileAsync" class="rounded bg-pc-darkgray px-3 py-1 text-white hover:bg-pc-blue" title="New file: the extension picks the runtime">New</button>
+    <button @onclick="ResetAsync" disabled="@busy" class="rounded bg-pc-darkgray px-3 py-1 text-white hover:bg-pc-blue disabled:opacity-50" title="Forget the saved files and go back to the samples">Reset</button>
+    <span class="mx-1 text-pc-darkgray">·</span>
+    <span class="text-pc-gray" title="The interpreter is chosen by the file extension">@ScriptLanguages.Display(Language)</span>
+    @if (Language == ScriptLanguage.Basic)
+    {
+        <label class="inline-flex items-center gap-1"><input type="radio" name="dialect" checked="@(dialect == "qbasic")" @onchange="SetDialectQBasic" /> QBasic</label>
+        <label class="inline-flex items-center gap-1"><input type="radio" name="dialect" checked="@(dialect == "qbs")" @onchange="SetDialectQbs" /> QBS (modern)</label>
+    }
+    <span class="mx-1 text-pc-darkgray">·</span>
+    <button @onclick="RunAsync" disabled="@busy" class="rounded bg-pc-brightgreen px-4 py-1 font-bold text-black disabled:opacity-50">Run</button>
+    <button @onclick="Stop" disabled="@(!busy)" class="rounded bg-pc-brightred px-4 py-1 font-bold text-black disabled:opacity-50">Stop</button>
+    @if (runStatus is not null)
+    {
+        <span class="text-pc-gray">@runStatus</span>
+    }
+</div>
+
+<div @ref="editorElement" class="h-[60vh] rounded border border-pc-darkgray"></div>
+
+@if (showScreen)
+{
+    <div class="rounded border border-pc-darkgray p-2">
+        <div class="mb-1 flex items-center justify-between text-sm">
+            <span class="font-bold text-pc-white">Program — @runFile</span>
+            <button @onclick="CloseScreen" class="rounded px-2 text-pc-gray hover:bg-pc-blue hover:text-white">Close</button>
+        </div>
+        <PixelScreen @key="runId" @ref="screen" OnReady="OnScreenReady" />
+    </div>
+}
+
+@if (log.Count > 0)
+{
+    <div class="rounded border border-pc-darkgray bg-pc-black">
+        <div class="flex items-center justify-between border-b border-pc-darkgray px-3 py-1 text-sm">
+            <span class="font-bold text-pc-white">Log</span>
+            <button @onclick="ClearLog" class="rounded px-2 text-pc-gray hover:bg-pc-blue hover:text-white">Clear</button>
+        </div>
+        <div class="max-h-60 overflow-auto px-3 py-2 font-mono text-sm">
+            @foreach (var line in log)
+            {
+                <div class="@(line.IsError ? "whitespace-pre-wrap text-pc-brightred" : "whitespace-pre-wrap text-pc-gray")">@line.Text</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private const string StorageKey = "screen9.editor.files";
+    private const int MaxLogLines = 1000;
+
+    /// <summary>The bundled samples (name → text), handed over by the server page.</summary>
+    [Parameter, EditorRequired] public Dictionary<string, string> Samples { get; set; } = [];
+    /// <summary>The file to open first (the <c>?file=</c> of the page), if it exists.</summary>
+    [Parameter] public string? InitialFile { get; set; }
+
+    private sealed class LogLine(string text, bool isError) { public string Text { get; } = text; public bool IsError { get; set; } = isError; }
+
+    private readonly SortedDictionary<string, string> files = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<LogLine> log = [];
+    private ElementReference editorElement;
+    private IJSObjectReference? monacoModule;
+    private IJSObjectReference? monacoHost;
+    private PixelScreen? screen;
+    private TaskCompletionSource? screenReady;
+    private CancellationTokenSource? runCts;
+    private string currentFile = "GORILLA.BAS";
+    private string dialect = "qbasic";
+    private string runFile = "";
+    private string newFileName = "";
+    private string? runStatus;
+    private bool showScreen, busy, disposed;
+    private int runId;
+
+    private ScriptLanguage Language => ScriptLanguages.ForFile(currentFile);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        foreach (var (name, text) in Samples) files[name] = text;
+        await LoadStoredFilesAsync();
+        currentFile = InitialFile is { Length: > 0 } wanted && files.ContainsKey(Path.GetFileName(wanted)) ? Path.GetFileName(wanted)
+            : files.ContainsKey(currentFile) ? currentFile : files.Keys.FirstOrDefault() ?? currentFile;
+
+        monacoModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/monacoHost.js");
+        monacoHost = await monacoModule.InvokeAsync<IJSObjectReference>("createMonacoHost", editorElement, files.GetValueOrDefault(currentFile, ""));
+        await monacoHost.InvokeVoidAsync("setLanguage", ScriptLanguages.MonacoLanguage(Language));
+        StateHasChanged();
+    }
+
+    // ---- files -------------------------------------------------------------------------------------------------------
+
+    /// <summary>The files saved in this browser over the samples. localStorage can be missing or full (private window): the editor works without it.</summary>
+    private async Task LoadStoredFilesAsync()
+    {
+        try
+        {
+            string? json = await JS.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+            if (json is null) return;
+            foreach (var (name, text) in JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [])
+                if (ScriptLanguages.IsSupported(name)) files[name] = text;
+        }
+        catch (Exception e) when (e is JSException or JsonException or InvalidOperationException) { }
+    }
+
+    private async Task PersistAsync()
+    {
+        try { await JS.InvokeVoidAsync("localStorage.setItem", StorageKey, JsonSerializer.Serialize(files)); }
+        catch (JSException) { Log("Could not save to this browser's storage.", isError: true); }
+    }
+
+    private async Task StoreCurrentTextAsync()
+    {
+        if (monacoHost is null) return;
+        files[currentFile] = await monacoHost.InvokeAsync<string>("getValue");
+    }
+
+    private async Task SaveAsync()
+    {
+        await StoreCurrentTextAsync();
+        await PersistAsync();
+        runStatus = "Saved";
+    }
+
+    private async Task NewFileAsync()
+    {
+        string name = Path.GetFileName(newFileName.Trim());
+        if (name.Length == 0) return;
+        if (!Path.HasExtension(name)) name += ".bas";
+        if (!ScriptLanguages.IsSupported(name)) { Log($"Unsupported extension: {name} (use .bas, .py or .csx)", isError: true); return; }
+        await StoreCurrentTextAsync();
+        files.TryAdd(name, "");
+        newFileName = "";
+        currentFile = name;
+        runStatus = null;
+        await LoadSelectedFileAsync();
+        await PersistAsync();
+    }
+
+    private async Task OnNewFileKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await NewFileAsync();
+    }
+
+    /// <summary>Picking a file in the list opens it at once; the text of the previous one is kept first, so switching never loses edits.</summary>
+    private async Task OnFileSelectedAsync(ChangeEventArgs e)
+    {
+        if (e.Value is not string file || file == currentFile || !files.ContainsKey(file)) return;
+        await StoreCurrentTextAsync();
+        currentFile = file;
+        runStatus = null;
+        await LoadSelectedFileAsync();
+    }
+
+    private async Task LoadSelectedFileAsync()
+    {
+        if (monacoHost is null) return;
+        await monacoHost.InvokeVoidAsync("setValue", files.GetValueOrDefault(currentFile, ""));
+        await monacoHost.InvokeVoidAsync("setLanguage", ScriptLanguages.MonacoLanguage(Language));
+    }
+
+    private async Task ResetAsync()
+    {
+        files.Clear();
+        foreach (var (name, text) in Samples) files[name] = text;
+        try { await JS.InvokeVoidAsync("localStorage.removeItem", StorageKey); } catch (JSException) { }
+        if (!files.ContainsKey(currentFile)) currentFile = files.Keys.FirstOrDefault() ?? currentFile;
+        runStatus = "Back to the samples";
+        await LoadSelectedFileAsync();
+    }
+
+    // ---- running -----------------------------------------------------------------------------------------------------
+
+    private void OnScreenReady() => screenReady?.TrySetResult();
+
+    private async Task RunAsync()
+    {
+        if (busy || monacoHost is null) return;
+        await StoreCurrentTextAsync();
+        await PersistAsync();
+        string text = files[currentFile];
+        var language = Language;
+        log.Clear();
+        runStatus = null;
+        if (language == ScriptLanguage.CSharp)
+        {
+            runStatus = "C# script runs on the server only";
+            Log("C# script (.csx) needs the Roslyn compiler, which is too large to load in the browser: it runs on the server, on the Gorillas (C# script) page.", isError: true);
+            return;
+        }
+
+        if (language == ScriptLanguage.Basic && dialect == "qbs")
+        {
+            await RunQbsAsync(text);
+            return;
+        }
+
+        runFile = currentFile;
+        screenReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        runId++;
+        showScreen = true;
+        busy = true;
+        runStatus = language == ScriptLanguage.Python ? "Running" : "Starting…";
+        StateHasChanged();
+        await screenReady.Task; // the screen for this run exists now (a new one for every run)
+        runStatus = "Running";
+
+        runCts = new CancellationTokenSource();
+        var token = runCts.Token;
+        var live = screen!;
+        await live.FocusAsync(); // the keys go to the program, as in a window in front of the page
+        string result;
+        try
+        {
+            result = language == ScriptLanguage.Python
+                ? await BrowserPython.RunAsync(text, runFile, new BrowserPythonHost(live, token), line => LogLive(line))
+                : await BrowserBasic.RunAsync(text, runFile, live, line => LogLive(line, isError: true), token);
+        }
+        finally
+        {
+            busy = false;
+        }
+        ReportResult(language, result);
+        StateHasChanged();
+    }
+
+    /// <summary>The modern QBS dialect is text in, text out (and the browser's dialogs): no program screen, the log shows it.</summary>
+    private async Task RunQbsAsync(string text)
+    {
+        showScreen = false;
+        busy = true;
+        runStatus = "Running";
+        runCts = new CancellationTokenSource();
+        StateHasChanged();
+        string result;
+        try { result = await BrowserQbs.RunAsync(text, currentFile, JS, line => LogLive(line), runCts.Token); }
+        finally { busy = false; }
+        runStatus = result is "Completed" ? "Finished" : result is "Canceled" ? "Stopped" : result;
+        StateHasChanged();
+    }
+
+    private void SetDialectQBasic() => dialect = "qbasic";
+    private void SetDialectQbs() => dialect = "qbs";
+
+    private void ReportResult(ScriptLanguage language, string result)
+    {
+        runStatus = result is "Completed" ? "Finished" : result is "Canceled" ? "Stopped" : result;
+        if (language != ScriptLanguage.Python || !result.StartsWith("Error: ", StringComparison.Ordinal)) return;
+        // The traceback is already in the log as the script's output: mark it as an error (red).
+        string message = result["Error: ".Length..];
+        var errorLines = message.Split('\n').Select(l => l.TrimEnd('\r')).Append(message).ToHashSet();
+        bool marked = false;
+        foreach (var line in log.Where(l => !l.IsError && errorLines.Contains(l.Text))) { line.IsError = true; marked = true; }
+        if (!marked) Log(message, isError: true);
+    }
+
+    private void Stop() => runCts?.Cancel();
+
+    private void CloseScreen()
+    {
+        runCts?.Cancel();
+        showScreen = false;
+    }
+
+    // ---- log ---------------------------------------------------------------------------------------------------------
+
+    private void Log(string text, bool isError = false)
+    {
+        foreach (var line in text.Split('\n')) log.Add(new LogLine(line.TrimEnd('\r'), isError));
+        if (log.Count > MaxLogLines) log.RemoveRange(0, log.Count - MaxLogLines);
+    }
+
+    /// <summary>A line written by the running program: it must reach the page while the program goes on.</summary>
+    private void LogLive(string text, bool isError = false)
+    {
+        Log(text, isError);
+        if (!disposed) StateHasChanged();
+    }
+
+    private void ClearLog() => log.Clear();
+
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        runCts?.Cancel();
+        if (monacoHost is not null) { try { await monacoHost.InvokeVoidAsync("dispose"); await monacoHost.DisposeAsync(); } catch (JSDisconnectedException) { } }
+        if (monacoModule is not null) { try { await monacoModule.DisposeAsync(); } catch (JSDisconnectedException) { } }
+    }
+}

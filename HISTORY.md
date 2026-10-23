@@ -38,8 +38,7 @@ The second embeddable language is **PySharp**, a Python interpreter written in C
 same match as the C# one, with the same seed and the same frames, launched by `pysharp run`, with no C# host in between.
 
 And C# itself, as an embeddable language: `gorillas.csx` is the same game as a script, run by C# scripting (Roslyn) with the same
-devices (`dotnet run ops/csx.cs -- gorillas.csx`). On the web, Monaco picks the interpreter from the file extension: `.bas`,
-`.py`, `.csx`.
+devices (`dotnet run ops/csx.cs -- gorillas.csx`). On the web, Monaco picks the interpreter from the file extension: `.bas` and `.py` run in the browser, `.csx` only on the server.
 
 ## 5 · More C# games and demos
 

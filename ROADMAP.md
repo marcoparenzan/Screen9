@@ -57,7 +57,7 @@ VGA mode 13 is 320×200 with 256 colours: one byte per pixel, a programmable pal
 - The interpreter: the AST walk is the cost of QBasic programs; look at caching and cheaper dispatch for the hot statements.
 - Debug builds: the engine is several times slower unoptimised (45 ms against 5 ms for a Rally-X frame). Optimise the libraries in Debug too,
   or warn when the site is started that way.
-- Frames from the server (C# script, editors): sending raw indices plus palette was measured and is not worth it (PNG encoding 2–7 ms, raw frames 2.5× larger);
+- Frames from the server (C# script, the grid editor): sending raw indices plus palette was measured and is not worth it (PNG encoding 2–7 ms, raw frames 2.5× larger);
   sending only what changed would be, or moving those pages to the browser too (Roslyn is heavy in WebAssembly; Python already runs there through PySharp's `RunAsync`).
 - PySharp `RunAsync` (the suspendable evaluator) does not wait inside class bodies, `__init__`, comprehensions, f-strings, `match` or callbacks of builtins, and has no generators or coroutines without threads; extend it if a game needs them.
 - First load of a game page: the AOT runtime is ~28 MB on disk; measure it on a real network, and trim (linker, fewer assemblies) if it matters.

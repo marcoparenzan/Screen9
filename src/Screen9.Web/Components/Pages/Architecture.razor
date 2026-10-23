@@ -49,7 +49,8 @@ Now (Blazor WebAssembly)
                     <tr><td class="py-1 pr-4"><a href="/gorillas-bas" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (.bas)</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">The 1990 original, on the QBSharp interpreter.</td></tr>
                     <tr><td class="py-1 pr-4"><a href="/gorillas-python" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (Python)</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">PySharp, our Python interpreter, waits without blocking.</td></tr>
                     <tr><td class="py-1 pr-4"><a href="/gorillas-csx" class="text-pc-brightcyan underline hover:text-pc-yellow">C# script</a></td><td class="py-1 pr-4 text-pc-yellow">Server</td><td class="py-1">Frames travel as PNG, about 30 a second at most.</td></tr>
-                    <tr><td class="py-1 pr-4"><a href="/editor" class="text-pc-brightcyan underline hover:text-pc-yellow">Editors</a></td><td class="py-1 pr-4 text-pc-yellow">Server</td><td class="py-1">They run the programs you type, which stay in the server.</td></tr>
+                    <tr><td class="py-1 pr-4"><a href="/editor-monaco" class="text-pc-brightcyan underline hover:text-pc-yellow">Monaco editor</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">Your .bas and .py files stay in your browser and run there; .csx does not run in it.</td></tr>
+                    <tr><td class="py-1 pr-4"><a href="/editor" class="text-pc-brightcyan underline hover:text-pc-yellow">Grid editor</a></td><td class="py-1 pr-4 text-pc-yellow">Server</td><td class="py-1">The character-grid QBasic editor.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -116,7 +117,7 @@ Now (Blazor WebAssembly)
         <p class="text-sm">
             Checked in headless Edge on the published build: the plasma, Rally-X, Gorillas in C#, in Python and the 1990 <code class="text-pc-yellow">GORILLA.BAS</code>, with
             screenshots and frame counters. Not yet checked: a real browser with a GPU, sound, touch, a real network (first-load time), and leaving a game page
-            mid-run. For the pages that stay on the server (C# script, editors), sending raw pixels instead of PNG was measured and rejected: encoding costs 2–7 ms, and raw frames would be
+            mid-run. For the pages that stay on the server (C# script, the grid editor), sending raw pixels instead of PNG was measured and rejected: encoding costs 2–7 ms, and raw frames would be
             2.5 times larger. The terminal never needed it: it already reads the raw pixels and the palette directly.
         </p>
     </section>

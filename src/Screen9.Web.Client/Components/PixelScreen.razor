@@ -26,6 +26,9 @@
     /// <summary>Completes when the canvas, keyboard and audio are wired up: await it before the first Present.</summary>
     public Task Ready => ready.Task;
 
+    /// <summary>Raised once, when the screen is ready (for a parent that creates and destroys screens as it goes).</summary>
+    [Parameter] public EventCallback OnReady { get; set; }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -37,6 +40,7 @@
         toneBeeper = await toneModule.InvokeAsync<IJSObjectReference>("createToneBeeper");
         await keyCapture.InvokeVoidAsync("focus");
         ready.TrySetResult();
+        await OnReady.InvokeAsync();
     }
 
     [JSInvokable]

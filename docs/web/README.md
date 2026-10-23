@@ -8,7 +8,7 @@ circuit, that is an independent session.
 and `GORILLA.BAS`) is a WebAssembly component in `src/Screen9.Web.Client` (`InteractiveWebAssembly`, no
 prerender), embedded in an otherwise server-rendered page: the program, its frames and its keys never leave the
 browser, so there is no SignalR round trip per frame. The server keeps what needs it: the C# script
-game (Roslyn is large and slow to load in WebAssembly), the two editors (they run the programs you type), and the pages
+game (Roslyn is large and slow to load in WebAssembly), the character-grid editor (`/editor`), and the pages
 themselves. Measured on the plasma in headless Edge: ~22 fps with the interpreted .NET runtime and 60 fps (1.1 ms
 per step) with AOT, which `dotnet publish` turns on (`RunAOTCompilation`, needs `dotnet workload install
 wasm-tools`); `dotnet run`/`build` stay interpreted and slower. Rally-X holds its 30 fps and Gorillas plays
@@ -43,12 +43,10 @@ Pages, reachable from the home page (`/` is the introduction, `/history` tells t
   C# scripting (Roslyn) in the server with the same devices (`Screen9.Scripting.GameGlobals`).
 - **`/editor`** — the full-screen editor of `qbs edit` (`EditorController`/`EditorApplication` unchanged),
   with a new `IEditorScreen`/`IEditorInputSource` for the browser. Keyboard only (no mouse for now).
-- **`/editor-monaco`** — a more "browser-like" editor, based on Monaco (CDN) instead of the character-grid UI:
-  it drives `EditorRunner` directly, bypassing `EditorController`. The interpreter is chosen from the file
-  extension: `.bas` → QBSharp (QBasic or QBS with the selector), `.py` → PySharp, `.csx` → C#
-  scripting (`?file=gorillas.py`, `?file=gorillas.csx`). Run executes the editor's text (saved or not) and opens a window in front of the page;
-  program output and errors (QBasic diagnostics, the Python traceback, C# compiler errors, in red) appear in a log under the editor. **New**
-  creates an in-memory file in this tab's temporary folder: its extension (`.bas`, `.py`, `.csx`) picks the runtime.
+- **`/editor-monaco`** — a more "browser-like" editor, based on Monaco (CDN) instead of the character-grid UI, **entirely in the browser**: the file list, Run and the program screen are a
+  WebAssembly component (see "The Monaco editor in the browser" below). The interpreter is chosen from the file extension: `.bas` → QBSharp (QBasic or QBS with the selector), `.py` → PySharp; `.csx` can be
+  edited but runs only on the server page (`?file=gorillas.py`, `?file=hello.bas`). Run executes the editor's text (saved or not) on a screen below the editor; output and errors (QBasic diagnostics, the Python
+  traceback, in red) appear in a log. **New** adds a file; its extension (`.bas`, `.py`, `.csx`) picks the runtime.
 
 ## How it works (reuse, not duplication)
 
@@ -63,7 +61,7 @@ Pages, reachable from the home page (`/` is the introduction, `/history` tells t
   which yields to the browser even for a zero wait), while the old synchronous `Run()` over `Sleep` is kept for
   the desktop window and the tests (with no `Delay`, every await completes at once). `QBasicEngine` was already
   async: TIMER waits and INKEY$ polls await a delay.
-- **Frames from the server** (editors, C# script): `Screen9.PngFrame` encodes a `PCCanvas`/`Canvas` as a palette-indexed PNG (about 6 KB and under
+- **Frames from the server** (the grid editor, C# script): `Screen9.PngFrame` encodes a `PCCanvas`/`Canvas` as a palette-indexed PNG (about 6 KB and under
   1 ms for an EGA frame), sent as a single `byte[]` and drawn on a `<canvas>` with `createImageBitmap`;
   only one draw is in flight at a time, the latest frame wins, and a frame skipped by the 30 Hz limit is still
   shown (`Flush`). The same throttling discipline (~30 Hz, unchanged frames dropped) as `PixelWindow` and
@@ -94,7 +92,8 @@ a screen in real time now run **in the browser**; the server only serves the pag
 | `/gorillas-bas` | browser | `BasicWasm` (`QBasicEngine`, the page passes the source as a parameter) |
 | `/gorillas-python` | browser | `PythonWasm` (PySharp `RunAsync`, see below) |
 | `/gorillas-csx` | server | Roslyn, PNG frames |
-| `/editor`, `/editor-monaco` | server | they run the user's programs, which must stay in the server |
+| `/editor-monaco` | browser | `EditorMonacoWasm`: `.bas` and `.py` run in the page, `.csx` does not |
+| `/editor` | server | the character-grid editor (`EditorController`), which drives QBasic on the server |
 
 C# script stays on the server because Roslyn is large and slow to load in WebAssembly. Moving it is possible later, not needed now. (Python used to stay on the server too, for want of a
 way to wait without a thread: see "Python in the browser" below.)
@@ -102,7 +101,7 @@ way to wait without a thread: see "Python in the browser" below.)
 ### Project layout
 
 - `src/Screen9.Web.Client` — `Microsoft.NET.Sdk.BlazorWebAssembly`, references `Screen9`, `Screen9.DemosCore`, `RallyXCore`,
-  `GorillasCore` and `QBSharp.QBasic`. It holds the components above, `BrowserKeyboard`/`BrowserKeyEvent` (namespace `Screen9.Web`, moved from the
+  `GorillasCore`, `QBSharp.QBasic`, `QBSharp.StandardLibrary` and `PySharp.Interpreter` (the package, from `LocalFeed/`). It holds the components above, `BrowserKeyboard`/`BrowserKeyEvent` (namespace `Screen9.Web`, moved from the
   server project) and the shared scripts `keyCapture.js`, `toneBeeper.js` (moved from the server's `wwwroot/js`, same URLs) and `pixelBlit.js`.
 - `src/Screen9.Web` references it, calls `AddInteractiveWebAssemblyComponents()` / `AddInteractiveWebAssemblyRenderMode()` and adds the client
   assembly to the router (`AdditionalAssemblies` in `Routes.razor`, `AddAdditionalAssemblies` in `Program.cs`). The packages
@@ -154,6 +153,25 @@ On the Screen9 side: `BrowserPythonHost` is the `web_host` of `gorillas.py`, the
 (`PixelScreen` + status line + Python output). `gorillas.py` is the same file as on the desktop and on the server. Checked on the published (AOT) site in headless Edge: the intro (with its
 sparkles, which are `sleep`s), names, a shot with the banana in flight — about 44 canvas draws a second during the flight, against a ceiling of about 50 (the game's own 20 ms step).
 Interpreted (`dotnet run`) it also plays, only slower. `PySharp.Interpreter` is a package reference of the client project too (`2.6.0`, from `LocalFeed/`).
+
+### The Monaco editor in the browser
+
+`/editor-monaco` is a static server page that embeds one WebAssembly component, `EditorMonacoWasm` (`Screen9.Web.Client`). The server only reads the bundled
+samples (`.bas`, `.py`, `.csx` from `samples/`) and hands them over as a parameter; from there everything is in the page:
+
+- **Files**: an in-memory list (the samples, then whatever this browser saved). **Save** writes them as JSON to `localStorage` (`screen9.editor.files`); **Reset** goes back to the samples;
+  **New** adds a file whose extension picks the runtime. localStorage can be missing or full (a private window): the editor works without it. Switching file keeps the text of the previous one.
+- **Editing**: `monacoHost.js` (moved to the client project, same URL; Monaco itself still comes from the jsDelivr CDN).
+- **Run** (the editor's text, saved or not) opens a **program screen below the editor** (a new `PixelScreen` for every run, created through `OnReady`; **Close** hides it, **Stop** cancels):
+  `.py` → `BrowserPython` (PySharp `RunAsync`, output and the traceback in the log, errors in red); `.bas` in the QBasic dialect → `BrowserBasic` (`QBasicEngine`, the same runner as the
+  GORILLA.BAS page, calibrated once); `.bas` in the **QBS (modern)** dialect → `BrowserQbs` (`ScriptEngine` + `StandardLibraryHost`: `Print`, `Json`, `Ui`, `Screen`…): text in and out, so no
+  program screen, the output goes to the log, and `Ui` dialogs are the browser's own (`prompt`/`alert`; `Select` takes a number). No files (`AllowFileIO=false`) and no Ralf.
+- **`.csx`** can be edited (it is in the list, and highlighted as C#), but Run says it needs the server: Roslyn is too large to load in the browser. It runs on `/gorillas-csx`.
+- **What was dropped** compared with the server version of this page: running `.csx` from the editor, the editor-owned INPUT dialog of `EditorRunner` (INPUT is now on the program screen, as in a window), and the
+  per-tab folder on the server. `ScriptLanguages.ServerCodeAllowed` and the `Screen9:AllowServerCode` setting are gone: no user-written code runs on the server any more through this page.
+
+Checked in headless Edge on the dev build (interpreted, so slow): the editor loads with Monaco and the samples; `hello.bas` in QBS prints `Hello, QBSharp` to the log; `gorillas.py` runs from the editor and
+takes keys on the program screen; `GORILLA.BAS` runs and shows its first prompt; Stop ends the run. Not checked: `Save` across a reload, `Reset`, `New`, the QBS `Ui` dialogs, the AOT build of the editor.
 
 ### AOT: required for speed
 
@@ -211,12 +229,10 @@ The footer of every page links to the repository's GitHub Issues, which is where
 
 ## Security: code run by the server
 
-Python and C# written by the user in Monaco run in the server process with its permissions (files, processes, network):
-fine on the development machine, never on a public host. They are therefore enabled only in the Development environment or with
-`Screen9:AllowServerCode=true` (`ScriptLanguages.ServerCodeAllowed`); otherwise Run says they are disabled.
-QBasic is confined by the interpreter (no file access in the game pages) and is always allowed. The Gorillas pages (Python, C# script)
-run fixed code included in the site and are not affected by the check (Python now runs in the visitor's browser, so it cannot touch the server at all). Note: PySharp's Python has `os`, `subprocess`, `socket`:
-before exposing the site a sandbox must be chosen, or only the fixed code left.
+Nothing a visitor writes runs in the server process any more. The Monaco editor runs `.bas` and `.py` in the visitor's browser (WebAssembly, the browser's own sandbox), and `.csx` is not run by it.
+What still runs on the server is fixed code included in the site (the C# script Gorillas page, `gorillas.csx`) and the character-grid editor (`/editor`), whose programs are QBasic on the
+interpreter (confined: no file access in the game pages). PySharp's Python has `os`, `subprocess`, `socket`: that is harmless in the browser (WebAssembly has no process or sockets to give) and is why it
+could not be run server-side on a public host; the old `Screen9:AllowServerCode` switch for that is gone.
 
 ## Known limits
 
