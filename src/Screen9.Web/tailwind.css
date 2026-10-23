@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @source "./Components/**/*.razor";
+@source "../Screen9.Web.Client/**/*.razor";
 @source "./wwwroot/js/**/*.js";
 
 /* The CGA/EGA palette (Screen9.CgaPalette) as Tailwind colors, so the website reads as the same machine

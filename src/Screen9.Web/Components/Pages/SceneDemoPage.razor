@@ -1,6 +1,4 @@
 @page "/scene-demo"
-@rendermode InteractiveServer
-@implements IAsyncDisposable
 @using Screen9.Demos
 
 <PageTitle>Scene demo — Screen9</PageTitle>
@@ -10,9 +8,9 @@
     <p class="text-sm text-pc-gray">
         The cell canvas — a character and two of the 16 colours per cell, origin at the top left — drawing text, a rectangle and a line, with a
         ball and a counter animated on top of a scene captured once. This is the model the engine uses for terminals; here it is drawn with the IBM
-        VGA ROM font and sent to your browser as a PNG. In a Windows console the same code runs with <code class="text-pc-yellow">dotnet run --project samples/csharp/Demos</code>.
+        VGA ROM font and runs in your browser (WebAssembly). In a Windows console the same code runs with <code class="text-pc-yellow">dotnet run --project samples/csharp/Demos</code>.
     </p>
-    <PixelDisplay @ref="display" />
+    <Screen9.Web.Client.Components.SceneWasm @rendermode="new InteractiveWebAssemblyRenderMode(prerender: false)" />
     <details class="rounded border border-pc-darkgray p-3">
         <summary class="cursor-pointer text-sm font-bold text-pc-white">The code (SceneDemo.cs)</summary>
         <pre class="mt-2 max-h-[32rem] overflow-auto text-xs text-pc-gray">@listing</pre>
@@ -20,38 +18,8 @@
 </div>
 
 @code {
-    private PixelDisplay? display;
-    private readonly CancellationTokenSource cts = new();
-    private Task? runTask;
     private string listing = "";
 
     protected override void OnInitialized()
         => listing = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "samples", "SceneDemo.cs")); // bundled read-only, see csproj
-
-    // Not OnInitialized: that runs before the first render, before <PixelDisplay @ref> is assigned.
-    protected override void OnAfterRender(bool firstRender)
-    {
-        if (firstRender) runTask = Task.Run(() => RunAsync(cts.Token));
-    }
-
-    private async Task RunAsync(CancellationToken token)
-    {
-        var demo = new SceneDemo(80, 25, "Screen9 - cell canvas demo");
-        try
-        {
-            while (!token.IsCancellationRequested)
-            {
-                demo.Step();
-                display?.PresentText(demo.Canvas);
-                await Task.Delay(33, token); // ~30 frames a second
-            }
-        }
-        catch (OperationCanceledException) { } // circuit disposed
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        cts.Cancel();
-        if (runTask is not null) { try { await runTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
-    }
 }

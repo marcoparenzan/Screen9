@@ -1,0 +1,39 @@
+@using Screen9.Demos
+@implements IDisposable
+
+<PixelScreen @ref="screen" />
+<div class="text-center text-xs text-pc-gray">@fps fps (running in the browser)</div>
+
+@code {
+    private PixelScreen? screen;
+    private readonly CancellationTokenSource cts = new();
+    private int fps;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || screen is null) return;
+        await screen.Ready;
+        await RunAsync(cts.Token);
+    }
+
+    private async Task RunAsync(CancellationToken token)
+    {
+        var demo = new PlasmaDemo();
+        long windowStart = Environment.TickCount64; int frames = 0;
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await PixelBlit.NextFrame(); // paced by the display: 60 a second where the screen can
+                demo.Step();
+                screen!.PresentGraphics(demo.Canvas);
+                frames++;
+                long now = Environment.TickCount64;
+                if (now - windowStart >= 1000) { fps = frames; frames = 0; windowStart = now; StateHasChanged(); }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose() => cts.Cancel();
+}

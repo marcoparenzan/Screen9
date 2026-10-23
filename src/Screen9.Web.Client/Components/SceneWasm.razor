@@ -1,0 +1,28 @@
+@using Screen9.Demos
+@implements IDisposable
+
+<PixelScreen @ref="screen" />
+
+@code {
+    private PixelScreen? screen;
+    private readonly CancellationTokenSource cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || screen is null) return;
+        await screen.Ready;
+        var demo = new SceneDemo(80, 25, "Screen9 - cell canvas demo");
+        try
+        {
+            while (!cts.IsCancellationRequested)
+            {
+                demo.Step();
+                screen.PresentText(demo.Canvas);
+                await GameClock.Delay(TimeSpan.FromMilliseconds(33), cts.Token); // ~30 frames a second
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose() => cts.Cancel();
+}

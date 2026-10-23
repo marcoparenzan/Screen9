@@ -1,0 +1,101 @@
+@* The screen of one program running in the browser: canvas, keyboard (INKEY$ strings) and Web Audio tones, all in-process.
+   Where PixelDisplay (Blazor Server) PNG-encodes every frame and ships it over SignalR, this expands the PCCanvas / cell
+   frame into an RGBA buffer and puts it on the canvas: no encode, no network, no throttle. *@
+@implements IAsyncDisposable
+@using System.Collections.Concurrent
+@using Screen9.Web
+@inject IJSRuntime JS
+
+<canvas id="@id" @ref="canvasElement" class="mx-auto block max-h-[70vh] max-w-full bg-pc-black [image-rendering:pixelated]"></canvas>
+<div class="text-center text-xs">
+    <button type="button" @onclick="Save" title="Download the screen as a PNG" class="text-pc-brightcyan underline hover:text-pc-yellow">Save PNG</button>
+</div>
+
+@code {
+    private readonly string id = "screen-" + Guid.NewGuid().ToString("N");
+    private readonly ConcurrentQueue<string> keys = new();
+    private readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private ElementReference canvasElement;
+    private DotNetObjectReference<PixelScreen>? selfReference;
+    private IJSObjectReference? keyCapture;
+    private IJSObjectReference? toneBeeper;
+    private byte[] rgba = [];
+    private int width, height;
+    private bool disposed;
+
+    /// <summary>Completes when the canvas, keyboard and audio are wired up: await it before the first Present.</summary>
+    public Task Ready => ready.Task;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await PixelBlit.EnsureLoadedAsync();
+        selfReference = DotNetObjectReference.Create(this);
+        var keyModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/keyCapture.js");
+        keyCapture = await keyModule.InvokeAsync<IJSObjectReference>("createKeyCapture", canvasElement, selfReference, nameof(HandleKeyDown));
+        var toneModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/toneBeeper.js");
+        toneBeeper = await toneModule.InvokeAsync<IJSObjectReference>("createToneBeeper");
+        await keyCapture.InvokeVoidAsync("focus");
+        ready.TrySetResult();
+    }
+
+    [JSInvokable]
+    public void HandleKeyDown(BrowserKeyEvent e)
+    {
+        string key = BrowserKeyboard.Encode(e);
+        if (key.Length > 0 && keys.Count < 1024) keys.Enqueue(key);
+    }
+
+    /// <summary>INKEY$: "" when no key is waiting.</summary>
+    public string ReadKey() => keys.TryDequeue(out var key) ? key : "";
+
+    public void FlushKeys() => keys.Clear();
+
+    public ValueTask FocusAsync() => keyCapture is null ? default : keyCapture.InvokeVoidAsync("focus");
+
+    public void PresentGraphics(PCCanvas canvas)
+    {
+        if (disposed) return;
+        Resize(canvas.Width, canvas.Height);
+        RgbaFrame.Fill(canvas, rgba);
+        PixelBlit.Draw(id, rgba);
+    }
+
+    public void PresentText(Canvas cells)
+    {
+        if (disposed) return;
+        var (w, h) = RgbaFrame.Size(cells);
+        Resize(w, h);
+        RgbaFrame.Fill(cells, rgba);
+        PixelBlit.Draw(id, rgba);
+    }
+
+    private void Resize(int newWidth, int newHeight)
+    {
+        if (newWidth == width && newHeight == height) return;
+        width = newWidth; height = newHeight;
+        rgba = new byte[width * height * 4];
+        PixelBlit.Attach(id, width, height);
+    }
+
+    /// <summary>Fire-and-forget: the browser plays the tone for its duration on its own.</summary>
+    public void RequestTone(double frequencyHz, double durationMs)
+    {
+        if (disposed || toneBeeper is null || frequencyHz <= 0 || durationMs <= 0) return;
+        _ = toneBeeper.InvokeVoidAsync("play", frequencyHz, durationMs);
+    }
+
+    private void Save() => PixelBlit.Save(id);
+
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        selfReference?.Dispose();
+        PixelBlit.Detach(id);
+        foreach (var module in new[] { keyCapture, toneBeeper })
+        {
+            if (module is null) continue;
+            try { await module.InvokeVoidAsync("dispose"); await module.DisposeAsync(); } catch (JSDisconnectedException) { }
+        }
+    }
+}

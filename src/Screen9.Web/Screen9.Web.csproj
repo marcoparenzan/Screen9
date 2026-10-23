@@ -10,6 +10,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../Screen9/Screen9.csproj" />
+    <ProjectReference Include="../Screen9.Web.Client/Screen9.Web.Client.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.13" />
     <ProjectReference Include="../QBSharp.Cli/QBSharp.Cli.csproj" />
     <ProjectReference Include="../../samples/csharp/Gorilla/GorillasCore.csproj" />
     <ProjectReference Include="../../samples/csharp/RallyX/RallyXCore.csproj" />

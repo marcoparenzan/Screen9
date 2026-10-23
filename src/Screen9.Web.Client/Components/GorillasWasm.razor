@@ -1,0 +1,36 @@
+@using Gorilla
+@implements IDisposable
+
+<PixelScreen @ref="screen" />
+
+@code {
+    private PixelScreen? screen;
+    private readonly CancellationTokenSource cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || screen is null) return;
+        await screen.Ready;
+        var token = cts.Token;
+        void Tone(PCTone tone) => screen.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds);
+        var host = new GorillasHost
+        {
+            Present = (graphics, cells) =>
+            {
+                if (graphics is not null) screen.PresentGraphics(graphics); else screen.PresentText(cells);
+            },
+            ReadKey = screen.ReadKey,
+            FlushKeys = screen.FlushKeys,
+            Delay = delay => GameClock.Delay(delay, token),
+            // Tone paces the game for the tone's duration (as PCSpeaker.Beep does on the desktop); the Web Audio call
+            // itself is fire-and-forget, the browser plays it for that same duration on its own.
+            ToneAsync = async tone => { Tone(tone); await GameClock.Delay(tone.Duration, token); },
+            Background = tones => _ = GameClock.PlayBackground(tones, Tone, token),
+            Seed = () => Random.Shared.Next(),
+        };
+        try { await new GorillasGame(host).RunAsync(); }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose() => cts.Cancel();
+}

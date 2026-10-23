@@ -1,8 +1,4 @@
 @page "/rally-x"
-@rendermode InteractiveServer
-@implements IAsyncDisposable
-@using System.Collections.Concurrent
-@using RallyX
 
 <PageTitle>Rally-X — Screen9</PageTitle>
 
@@ -23,70 +19,5 @@
             after Gorillas — feedback is welcome, on <a href="https://github.com/marcoparenzan/Screen9/issues" target="_blank" rel="noopener" class="text-pc-brightcyan underline hover:text-pc-yellow">GitHub Issues</a>.
         </p>
     </div>
-    <PixelDisplay @ref="display" OnKeyDown="HandleKeyDownAsync" />
+    <Screen9.Web.Client.Components.RallyXWasm @rendermode="new InteractiveWebAssemblyRenderMode(prerender: false)" />
 </div>
-
-@code {
-    private PixelDisplay? display;
-    private readonly CancellationTokenSource cts = new();
-    private readonly ConcurrentQueue<string> keys = new();
-    private Task? gameTask;
-
-    // Not OnInitialized: that runs before the first render, before <PixelDisplay @ref> is assigned.
-    protected override void OnAfterRender(bool firstRender)
-    {
-        if (firstRender) gameTask = Task.Run(() => RunGame(cts.Token));
-    }
-
-    private void RunGame(CancellationToken token)
-    {
-        var host = new RallyXHost
-        {
-            Present = canvas => display?.PresentGraphics(canvas),
-            ReadKey = () => keys.TryDequeue(out var key) ? key : "",
-            Sleep = delay => Sleep(delay, token),
-            Sound = tones => _ = Task.Run(async () =>
-            {
-                foreach (var tone in tones)
-                {
-                    token.ThrowIfCancellationRequested();
-                    display?.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds);
-                    await Task.Delay(tone.Duration, token);
-                }
-            }, token),
-            Seed = () => Random.Shared.Next(),
-        };
-        try
-        {
-            var game = new RallyXGame(host);
-            while (!token.IsCancellationRequested) game.Run(); // Esc on the title screen just shows it again
-        }
-        catch (OperationCanceledException) { } // circuit disposed
-    }
-
-    /// <summary>Thread.Sleep in short slices so Cancel() (DisposeAsync, page navigated away) lands promptly.</summary>
-    private void Sleep(TimeSpan delay, CancellationToken token)
-    {
-        token.ThrowIfCancellationRequested();
-        long end = Environment.TickCount64 + (long)delay.TotalMilliseconds;
-        while (Environment.TickCount64 < end)
-        {
-            token.ThrowIfCancellationRequested();
-            display?.Flush(); // a frame skipped by the 30 Hz cap still reaches the screen
-            Thread.Sleep((int)Math.Clamp(end - Environment.TickCount64, 0, 20));
-        }
-    }
-
-    private Task HandleKeyDownAsync(BrowserKeyEvent e)
-    {
-        string key = BrowserKeyboard.Encode(e);
-        if (key.Length > 0 && keys.Count < 1024) keys.Enqueue(key);
-        return Task.CompletedTask;
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        cts.Cancel();
-        if (gameTask is not null) { try { await gameTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { } }
-    }
-}

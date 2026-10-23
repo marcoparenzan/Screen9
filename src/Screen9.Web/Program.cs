@@ -18,7 +18,8 @@ var builder = WebApplication.CreateBuilder(args);
 _ = Task.Run(() => QBSharp.Cli.QBasicRunPolicy.CalibratedTimerWaitScale);
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddInteractiveWebAssemblyComponents();
 
 var app = builder.Build();
 
@@ -39,6 +40,8 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode()
+    .AddInteractiveWebAssemblyRenderMode()
+    .AddAdditionalAssemblies(typeof(Screen9.Web.Client.Components.PlasmaWasm).Assembly);
 
 app.Run();

@@ -1,0 +1,32 @@
+@using RallyX
+@implements IDisposable
+
+<PixelScreen @ref="screen" />
+
+@code {
+    private PixelScreen? screen;
+    private readonly CancellationTokenSource cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || screen is null) return;
+        await screen.Ready;
+        var token = cts.Token;
+        var host = new RallyXHost
+        {
+            Present = canvas => screen.PresentGraphics(canvas),
+            ReadKey = screen.ReadKey,
+            Delay = delay => GameClock.Delay(delay, token),
+            Sound = tones => _ = GameClock.PlayBackground(tones, tone => screen.RequestTone(tone.Frequency, tone.Duration.TotalMilliseconds), token),
+            Seed = () => Random.Shared.Next(),
+        };
+        try
+        {
+            var game = new RallyXGame(host);
+            while (!token.IsCancellationRequested) await game.RunAsync(); // Esc on the title screen just shows it again
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose() => cts.Cancel();
+}

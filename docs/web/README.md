@@ -4,6 +4,16 @@
 same QBSharp interpreter/editor used on the desktop, served to a browser — each tab is an isolated Blazor
 circuit, that is an independent session.
 
+**Hybrid: the screens run in the browser.** Everything that draws a screen in real time (the C# games, the demos
+and `GORILLA.BAS`) is a WebAssembly component in `src/Screen9.Web.Client` (`InteractiveWebAssembly`, no
+prerender), embedded in an otherwise server-rendered page: the program, its frames and its keys never leave the
+browser, so there is no SignalR round trip per frame. The server keeps what needs it: the Python and C# script
+games (PySharp and Roslyn run on the server, and their `sleep` blocks a thread), the two editors, and the pages
+themselves. Measured on the plasma in headless Edge: ~22 fps with the interpreted .NET runtime and 60 fps (1.1 ms
+per step) with AOT, which `dotnet publish` turns on (`RunAOTCompilation`, needs `dotnet workload install
+wasm-tools`); `dotnet run`/`build` stay interpreted and slower. Rally-X holds its 30 fps and Gorillas plays
+normally.
+
 ## Starting it
 
 ```powershell
@@ -45,12 +55,19 @@ Pages, reachable from the home page (`/` is the introduction, `/history` tells t
   it is implemented by `PixelWindow`; on the web by `BrowserDisplay`, inside `ProgramDialog` (a modal in front of the page). A
   `PixelWindow` opened by the server would end up in a window on the server, behind the browser: that is why
   `EditorApplication` has configurable `ProgramWindow`/`Audio`/`EnableAi`.
-- **Frames**: `Screen9.PngFrame` encodes a `PCCanvas`/`Canvas` as a palette-indexed PNG (about 6 KB and under
+- **Frames in the browser (WebAssembly)**: `Screen9.RgbaFrame` expands the visible `PCCanvas`/`Canvas` into a
+  reusable RGBA buffer, `PixelScreen` (`Screen9.Web.Client`) copies it into the canvas `ImageData` through a
+  `[JSImport]` (`pixelBlit.js`) — no PNG, no throttle. There is no thread to sleep on in the browser, so the games
+  are async: `GorillasGame.RunAsync` and `RallyXGame.RunAsync` await `Delay` on their host (`GameClock.Delay`,
+  which yields to the browser even for a zero wait), while the old synchronous `Run()` over `Sleep` is kept for
+  the desktop window and the tests (with no `Delay`, every await completes at once). `QBasicEngine` was already
+  async: TIMER waits and INKEY$ polls await a delay.
+- **Frames from the server** (editors, Python, C# script): `Screen9.PngFrame` encodes a `PCCanvas`/`Canvas` as a palette-indexed PNG (about 6 KB and under
   1 ms for an EGA frame), sent as a single `byte[]` and drawn on a `<canvas>` with `createImageBitmap`;
   only one draw is in flight at a time, the latest frame wins, and a frame skipped by the 30 Hz limit is still
   shown (`Flush`). The same throttling discipline (~30 Hz, unchanged frames dropped) as `PixelWindow` and
-  `AnsiFrameRenderer`/`AnsiCanvasRenderer`, without sharing their code (they are independent renderers, as they
-  already are among themselves).
+  `AnsiFrameRenderer`/`AnsiCanvasRenderer`, without sharing their code. With one draw in flight the rate also
+  follows the round trip, so a slow link lowers it by itself (the C# script game reaches ~20 fps on localhost).
 - **Keyboard**: `BrowserKeyboard` (towards INKEY$, like `PCKeyboard.Encode`) and `BlazorEditorInput` (towards
   `EditorInput`, like `EditorInputDecoder.DecodeVt`) read the browser's `keydown` events.
 - **Audio**: PLAY/BEEP/SOUND tones are played with real Web Audio (`AudioContext`/`OscillatorNode`), not
