@@ -186,7 +186,7 @@ takes keys on the program screen; `GORILLA.BAS` runs and shows its first prompt;
 | WebAssembly, AOT (`dotnet publish`) | 1.1 ms (+0.2 ms) | 60 |
 
 Drawing on the canvas costs about 0.2 ms either way. Rally-X holds its 30 frames a second with AOT; Gorillas (C# and `.bas`) play normally.
-`RunAOTCompilation` is set in the client project and takes effect only on `publish` (about 3½ minutes, it compiles the whole runtime); it needs the workload:
+`RunAOTCompilation` is set in the client project and takes effect only on `publish` (from about 3½ to 9 minutes depending on the machine; it compiles the whole runtime); it needs the workload:
 
 ```powershell
 dotnet workload install wasm-tools

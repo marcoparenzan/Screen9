@@ -258,8 +258,8 @@ dotnet publish src\Screen9.Web\Screen9.Web.csproj -c Release -o ops\artifacts\si
 dotnet ops\artifacts\site\Screen9.Web.dll --urls http://localhost:5280
 ```
 
-The first publish takes about 3½ minutes (it compiles the whole runtime ahead of time). `ops\artifacts\` is ignored by git. Stop any running copy of the site first — **a running `Screen9.Web` (including the one Visual Studio starts) locks `Screen9.Web.Client.dll`** and the build or publish fails with `MSB3027`.
-The published site runs in the `Production` environment by default and serves its files from `wwwroot` under the content root (see `Program.cs`: it fails fast if `wwwroot` is missing, and the working directory must not be changed before the host is built).
+Publishing takes from about 3½ minutes (the development machine) to 8½ (the maintainer's machine), because it compiles the whole runtime ahead of time. `ops\artifacts\` is ignored by git. Stop any running copy of the site first — **a running `Screen9.Web` (including the one Visual Studio starts) locks `Screen9.Web.Client.dll`** and the build or publish fails with `MSB3027`.
+The published site runs in the `Production` environment by default and serves its files from `wwwroot` under the content root. `Program.cs` takes the content root from the working directory, **except** that if the working directory has no `wwwroot` but the folder of the DLL has one, it uses that (so the command above works from the repository root; it used to fail with *"wwwroot not found at ''"* unless you `cd` into the site folder first). It still fails fast if neither has one, and the working directory must not be changed before the host is built.
 
 ### Deploy
 
@@ -349,6 +349,7 @@ Headless virtual time (`--virtual-time-budget`) makes in-page seconds meaningles
 | `AddInteractiveWebAssemblyComponents` not found | It is in `Microsoft.AspNetCore.Components.WebAssembly.Server`, not in the client package. |
 | `MSB3027` copying `Screen9.Web.Client.dll` | The site (or Visual Studio) is running and locks it. |
 | A game freezes the page after a long frame | A zero wait completed synchronously; `GameClock.Delay` must `Task.Yield()` for waits of zero or less. |
+| `wwwroot not found at ''` starting the published site | Started from a folder without `wwwroot` (fixed: the DLL's folder is used when the working directory has none); on an older build, `cd` into the site folder. |
 | `dotnet run` is "very slow" | Interpreted WebAssembly. Publish (AOT); a Release build alone does not help (section 8). |
 | Python `sleep` freezes the page | The script ran through `Run`, not `RunAsync`, or the wait is in a place that does not suspend (section 6). |
 | Headless frame counters read 0 or nonsense | `--virtual-time-budget` distorts timers; measure in real time with a remote debugging port. |

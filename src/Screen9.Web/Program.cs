@@ -4,7 +4,12 @@ using Screen9.Web.Components;
 // The builder comes first, and the order matters: the content root (wwwroot, appsettings.json) is taken from the working
 // directory at this moment. It used to be changed before this line, and a published site then looked for its static files in
 // the scratch folder below and served every one of them empty (200 with no body, so no styles and no scripts).
-var builder = WebApplication.CreateBuilder(args);
+// Started from another folder (`dotnet ops/artifacts/site/Screen9.Web.dll` from the repository root), the working directory has no wwwroot but the
+// folder of the published DLL does: use that one as the content root. In development, and when started from the site's own folder, nothing changes.
+var options = new WebApplicationOptions { Args = args };
+if (!Directory.Exists(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot")) && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "wwwroot")))
+    options = new WebApplicationOptions { Args = args, ContentRootPath = AppContext.BaseDirectory };
+var builder = WebApplication.CreateBuilder(options);
 
 // The TUI editor's Open dialog starts with an empty path box (QBSharp.Cli.Editor.EditorController.OpenDialog):
 // a bare filename a user types there resolves via Path.GetFullPath against this process-wide working
