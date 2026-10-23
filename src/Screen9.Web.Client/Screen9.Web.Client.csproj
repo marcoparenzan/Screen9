@@ -22,6 +22,8 @@
     <ProjectReference Include="../../samples/csharp/RallyX/RallyXCore.csproj" />
     <ProjectReference Include="../../samples/csharp/Gorilla/GorillasCore.csproj" />
     <ProjectReference Include="../QBSharp.QBasic/QBSharp.QBasic.csproj" />
+    <!-- PySharp (Python in C#), from ../../LocalFeed (see LocalFeed/README.md): 2.6.0 has RunAsync, which waits instead of blocking a thread. -->
+    <PackageReference Include="PySharp.Interpreter" Version="2.6.0" />
   </ItemGroup>
 
 </Project>

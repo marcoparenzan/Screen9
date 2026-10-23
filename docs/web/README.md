@@ -7,8 +7,8 @@ circuit, that is an independent session.
 **Hybrid: the screens run in the browser.** Everything that draws a screen in real time (the C# games, the demos
 and `GORILLA.BAS`) is a WebAssembly component in `src/Screen9.Web.Client` (`InteractiveWebAssembly`, no
 prerender), embedded in an otherwise server-rendered page: the program, its frames and its keys never leave the
-browser, so there is no SignalR round trip per frame. The server keeps what needs it: the Python and C# script
-games (PySharp and Roslyn run on the server, and their `sleep` blocks a thread), the two editors, and the pages
+browser, so there is no SignalR round trip per frame. The server keeps what needs it: the C# script
+game (Roslyn is large and slow to load in WebAssembly), the two editors (they run the programs you type), and the pages
 themselves. Measured on the plasma in headless Edge: ~22 fps with the interpreted .NET runtime and 60 fps (1.1 ms
 per step) with AOT, which `dotnet publish` turns on (`RunAOTCompilation`, needs `dotnet workload install
 wasm-tools`); `dotnet run`/`build` stay interpreted and slower. Rally-X holds its 30 fps and Gorillas plays
@@ -30,9 +30,9 @@ Pages, reachable from the home page (`/` is the introduction, `/history` tells t
   `GorillasGame`/`GorillasHost` as the desktop pixel window, only with a different host (no GDI/Win32).
 - **`/gorillas-bas`** — the original GORILLA.BAS (1990) run by `QBasicEngine`, wired like
   `qbs run --dialect qbasic` with `QBS_GRAPHICS=pixel`. No file system access (`AllowFileIO=false`).
-- **`/gorillas-python`** — `samples/python/Gorilla/gorillas.py`, the same file as `pysharp run`, run by
-  PySharp embedded in the server (`PySharp.Interpreter` from `LocalFeed/`): the site passes the screen, the keyboard and
-  the speaker as the `web_host` variable (`PythonGameHost`), and an in-memory `screen9` module on top of the engine.
+- **`/gorillas-python`** — `samples/python/Gorilla/gorillas.py`, the same file as `pysharp run`, run **in the browser** by
+  PySharp (`PySharp.Interpreter` 2.6.0 from `LocalFeed/`, `PyEngine.RunAsync`): the page passes the screen, the keyboard and
+  the speaker as the `web_host` variable (`BrowserPythonHost`), and an in-memory `screen9` module on top of the engine.
 - **`/architecture`** — how the site is built: the server, the WebAssembly islands, the async games, the AOT numbers (the page version of the section below).
 - **`/history`**, **`/library`**, **`/roadmap`** — the Mode 9 history, the Coding Guide (runnable mode 9 snippets), and the roadmap.
 - **`/plasma-demo`**, **`/scene-demo`** — the demos of `samples/csharp/Demos` (`Screen9.DemosCore`): a VGA mode 13 plasma with palette cycling, and the
@@ -63,7 +63,7 @@ Pages, reachable from the home page (`/` is the introduction, `/history` tells t
   which yields to the browser even for a zero wait), while the old synchronous `Run()` over `Sleep` is kept for
   the desktop window and the tests (with no `Delay`, every await completes at once). `QBasicEngine` was already
   async: TIMER waits and INKEY$ polls await a delay.
-- **Frames from the server** (editors, Python, C# script): `Screen9.PngFrame` encodes a `PCCanvas`/`Canvas` as a palette-indexed PNG (about 6 KB and under
+- **Frames from the server** (editors, C# script): `Screen9.PngFrame` encodes a `PCCanvas`/`Canvas` as a palette-indexed PNG (about 6 KB and under
   1 ms for an EGA frame), sent as a single `byte[]` and drawn on a `<canvas>` with `createImageBitmap`;
   only one draw is in flight at a time, the latest frame wins, and a frame skipped by the 30 Hz limit is still
   shown (`Flush`). The same throttling discipline (~30 Hz, unchanged frames dropped) as `PixelWindow` and
@@ -92,11 +92,12 @@ a screen in real time now run **in the browser**; the server only serves the pag
 | `/rally-x` | browser | `RallyXWasm` (`RallyXGame.RunAsync`) |
 | `/gorillas-csharp` | browser | `GorillasWasm` (`GorillasGame.RunAsync`) |
 | `/gorillas-bas` | browser | `BasicWasm` (`QBasicEngine`, the page passes the source as a parameter) |
-| `/gorillas-python`, `/gorillas-csx` | server | PySharp / Roslyn, PNG frames |
+| `/gorillas-python` | browser | `PythonWasm` (PySharp `RunAsync`, see below) |
+| `/gorillas-csx` | server | Roslyn, PNG frames |
 | `/editor`, `/editor-monaco` | server | they run the user's programs, which must stay in the server |
 
-Python stays on the server because its `sleep` blocks a thread (the browser has one thread, and PySharp is an external package that
-cannot be made async from here); C# script because Roslyn is large and slow to load in WebAssembly. Moving them is possible later, not needed now.
+C# script stays on the server because Roslyn is large and slow to load in WebAssembly. Moving it is possible later, not needed now. (Python used to stay on the server too, for want of a
+way to wait without a thread: see "Python in the browser" below.)
 
 ### Project layout
 
@@ -135,7 +136,24 @@ The browser runs .NET on a single thread: a `Thread.Sleep` or a blocking game lo
   `GameClock.PlayBackground` plays `PLAY "MB…"` tones one after the other without stopping the game.
 - `QBasicEngine` was already async: INKEY$ polls and TIMER waits `await options.Delay`. `BasicWasm` measures the empty-loop speed once on the user's machine (about half a second, after the first paint)
   and sets `TimerWaitScale`, the same calibration the server does (`QBasicRunPolicy.CalibratedTimerWaitScale`, which lives in `QBSharp.Cli` and is not referenced from the browser).
+- Python has no game loop to convert at all: PySharp itself learned to wait (below).
 - Plasma and the demos have no loop of their own to convert: the component drives `Step()` from `requestAnimationFrame` (`PixelBlit.NextFrame`) or a 33 ms delay.
+
+### Python in the browser: `PyEngine.RunAsync`
+
+`gorillas.py` blocks in `sleep`, and the browser has one thread, so Python needed a way to wait without a thread. .NET WebAssembly threads are experimental
+and not supported for Blazor (they also need cross-origin isolation headers), and rewriting PySharp's 3,800-line evaluator as async everywhere would have slowed
+every script and touched everything its 1,300 tests cover. PySharp 2.6.0 (`D:\Dev\2026\repos\PySharp`, packed into `LocalFeed/`) instead has a **second,
+suspendable evaluator** beside the synchronous one: `PyEngine.RunAsync` runs the same AST on the caller's thread and **awaits** a call to a .NET method that returns
+a `Task` (and `time.sleep`). It only re-implements what can contain a call (statements that nest statements, calls, attributes, operators…) and delegates the rest to the synchronous
+evaluator through the same helpers, so semantics cannot drift. Details and the list of what does *not* suspend (class bodies, `__init__`, comprehensions, f-strings,
+`match`, callbacks of builtins, generators and coroutines) are in PySharp's `ARCHITECTURE.md` §12d.
+
+On the Screen9 side: `BrowserPythonHost` is the `web_host` of `gorillas.py`, the same contract as the server's `PythonGameHost`, but `sleep` and `tone` **return a `Task`**
+(`GameClock.Delay`) instead of blocking; `BrowserPython.RunAsync` builds the engine with the in-memory `screen9` module and calls `engine.RunAsync`; `PythonWasm` is the component
+(`PixelScreen` + status line + Python output). `gorillas.py` is the same file as on the desktop and on the server. Checked on the published (AOT) site in headless Edge: the intro (with its
+sparkles, which are `sleep`s), names, a shot with the banana in flight — about 44 canvas draws a second during the flight, against a ceiling of about 50 (the game's own 20 ms step).
+Interpreted (`dotnet run`) it also plays, only slower. `PySharp.Interpreter` is a package reference of the client project too (`2.6.0`, from `LocalFeed/`).
 
 ### AOT: required for speed
 
@@ -197,7 +215,7 @@ Python and C# written by the user in Monaco run in the server process with its p
 fine on the development machine, never on a public host. They are therefore enabled only in the Development environment or with
 `Screen9:AllowServerCode=true` (`ScriptLanguages.ServerCodeAllowed`); otherwise Run says they are disabled.
 QBasic is confined by the interpreter (no file access in the game pages) and is always allowed. The Gorillas pages (Python, C# script)
-run fixed code included in the site and are not affected by the check. Note: PySharp's Python has `os`, `subprocess`, `socket`:
+run fixed code included in the site and are not affected by the check (Python now runs in the visitor's browser, so it cannot touch the server at all). Note: PySharp's Python has `os`, `subprocess`, `socket`:
 before exposing the site a sandbox must be chosen, or only the fixed code left.
 
 ## Known limits

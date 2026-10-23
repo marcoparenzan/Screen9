@@ -53,5 +53,5 @@ rest of the engine ([Demos](samples/csharp/Demos/README.md)).
 The site: the same engine and the same interpreters, served by a browser (Blazor Server): each tab is an independent session.
 The screen is a canvas, the keyboard the browser's, the audio Web Audio. The program opens in a window in front of the page.
 Later the screens moved into the browser (Blazor WebAssembly): the games and GORILLA.BAS run there, with no frame crossing the network, 60 frames a second
-for the plasma once ahead-of-time compiled; only Python, C# script and the editors stay on the server.
+for the plasma once ahead-of-time compiled; Python too, once PySharp learned to wait instead of blocking a thread (`PyEngine.RunAsync`); only the C# script game and the editors stay on the server.
 See [docs/web](docs/web/README.md).

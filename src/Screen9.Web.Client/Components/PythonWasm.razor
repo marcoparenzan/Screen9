@@ -1,0 +1,35 @@
+@* A Python program on PySharp, running in the browser. PyEngine.RunAsync runs it on the page's own thread and awaits the
+   host's waits (BrowserPythonHost.sleep/tone return tasks), so it shares the one browser thread with painting and keys. *@
+@implements IDisposable
+
+<PixelScreen @ref="screen" />
+<div class="mt-2 text-sm text-pc-gray">@status</div>
+@if (log.Count > 0)
+{
+    <pre class="mt-1 max-h-40 overflow-auto text-xs text-pc-brightred">@string.Join("\n", log)</pre>
+}
+
+@code {
+    /// <summary>The program text.</summary>
+    [Parameter, EditorRequired] public string Source { get; set; } = "";
+    [Parameter] public string FileName { get; set; } = "gorillas.py";
+
+    private PixelScreen? screen;
+    private readonly CancellationTokenSource cts = new();
+    private readonly List<string> log = [];
+    private string status = "Loading Python…";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || screen is null) return;
+        await screen.Ready;
+        await Task.Yield(); // let the first paint happen before PySharp starts
+        status = "";
+        StateHasChanged();
+        string result = await BrowserPython.RunAsync(Source, FileName, new BrowserPythonHost(screen, cts.Token), line => log.Add(line));
+        status = result == "Completed" ? "Finished." : result == "Canceled" ? "" : result;
+        StateHasChanged();
+    }
+
+    public void Dispose() => cts.Cancel();
+}

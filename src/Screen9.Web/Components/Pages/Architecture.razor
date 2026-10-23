@@ -47,14 +47,14 @@ Now (Blazor WebAssembly)
                     <tr><td class="py-1 pr-4"><a href="/rally-x" class="text-pc-brightcyan underline hover:text-pc-yellow">Rally-X</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">The C# game, 30 frames a second.</td></tr>
                     <tr><td class="py-1 pr-4"><a href="/gorillas-csharp" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (C#)</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">The same game as the desktop window.</td></tr>
                     <tr><td class="py-1 pr-4"><a href="/gorillas-bas" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (.bas)</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">The 1990 original, on the QBSharp interpreter.</td></tr>
-                    <tr><td class="py-1 pr-4"><a href="/gorillas-python" class="text-pc-brightcyan underline hover:text-pc-yellow">Python</a>, <a href="/gorillas-csx" class="text-pc-brightcyan underline hover:text-pc-yellow">C# script</a></td><td class="py-1 pr-4 text-pc-yellow">Server</td><td class="py-1">Frames travel as PNG, about 30 a second at most.</td></tr>
+                    <tr><td class="py-1 pr-4"><a href="/gorillas-python" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (Python)</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">PySharp, our Python interpreter, waits without blocking.</td></tr>
+                    <tr><td class="py-1 pr-4"><a href="/gorillas-csx" class="text-pc-brightcyan underline hover:text-pc-yellow">C# script</a></td><td class="py-1 pr-4 text-pc-yellow">Server</td><td class="py-1">Frames travel as PNG, about 30 a second at most.</td></tr>
                     <tr><td class="py-1 pr-4"><a href="/editor" class="text-pc-brightcyan underline hover:text-pc-yellow">Editors</a></td><td class="py-1 pr-4 text-pc-yellow">Server</td><td class="py-1">They run the programs you type, which stay in the server.</td></tr>
                 </tbody>
             </table>
         </div>
         <p class="text-sm">
-            Python stays on the server because its <code class="text-pc-yellow">sleep</code> blocks a thread and the browser has only one; C# script because the compiler (Roslyn) is large
-            and slow to load in WebAssembly.
+            C# script stays on the server because the compiler (Roslyn) is large and slow to load in WebAssembly.
         </p>
     </section>
 
@@ -79,7 +79,17 @@ Now (Blazor WebAssembly)
     </section>
 
     <section class="flex flex-col gap-3">
-        <h2 class="text-xl font-bold text-pc-white">5 · Ahead-of-time compilation</h2>
+        <h2 class="text-xl font-bold text-pc-white">5 · Python that waits</h2>
+        <p class="text-sm">
+            The Python game pauses with <code class="text-pc-yellow">sleep</code>, which blocks a thread, and the browser has only one. PySharp now has a second evaluator,
+            <code class="text-pc-yellow">PyEngine.RunAsync</code>, that runs the same program on the page's own thread and <span class="text-pc-white">awaits</span> a call to a .NET method
+            that returns a task. The host's <code class="text-pc-yellow">sleep</code> returns one, so the game paces itself and the page keeps painting and reading keys. It re-implements only what can contain
+            a call and leaves the rest to the original evaluator, so the two cannot disagree on what Python means. In headless Edge on the published build it draws about 44 frames a second during a banana flight, against a ceiling of about 50.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">6 · Ahead-of-time compilation</h2>
         <p class="text-sm">
             .NET in WebAssembly interprets its code unless it is compiled in advance. On the plasma, in headless Edge:
         </p>
@@ -102,11 +112,11 @@ Now (Blazor WebAssembly)
     </section>
 
     <section class="flex flex-col gap-3">
-        <h2 class="text-xl font-bold text-pc-white">6 · What was measured and what was not</h2>
+        <h2 class="text-xl font-bold text-pc-white">7 · What was measured and what was not</h2>
         <p class="text-sm">
-            Checked in headless Edge on the published build: the plasma, Rally-X, Gorillas in C# and the 1990 <code class="text-pc-yellow">GORILLA.BAS</code>, with
+            Checked in headless Edge on the published build: the plasma, Rally-X, Gorillas in C#, in Python and the 1990 <code class="text-pc-yellow">GORILLA.BAS</code>, with
             screenshots and frame counters. Not yet checked: a real browser with a GPU, sound, touch, a real network (first-load time), and leaving a game page
-            mid-run. For the pages that stay on the server, sending raw pixels instead of PNG was measured and rejected: encoding costs 2–7 ms, and raw frames would be
+            mid-run. For the pages that stay on the server (C# script, editors), sending raw pixels instead of PNG was measured and rejected: encoding costs 2–7 ms, and raw frames would be
             2.5 times larger. The terminal never needed it: it already reads the raw pixels and the palette directly.
         </p>
     </section>
