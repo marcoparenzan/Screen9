@@ -90,7 +90,7 @@
         </p>
         <p class="text-sm">
             The price: the published runtime is about 29.8 MB on disk and <span class="text-pc-white">6.5 MB over the wire</span> with Brotli compression, downloaded once per visitor and then cached.
-            The first load on a real network has not been measured yet.
+            On the live site (Azure) a first visit transferred 7.5 MB in 90 requests, and the plasma ran at 61 frames a second; a mobile network has not been tried.
         </p>
     </section>
 
@@ -128,7 +128,7 @@
         <ul class="list-disc pl-5 text-sm">
             <li>The C# script game and the character-grid editor still run on the server: the Roslyn compiler is too large to load in a browser page.</li>
             <li>Only a published build is fast; <code class="text-pc-yellow">dotnet run</code> and the Visual Studio debugger run interpreted code.</li>
-            <li>Not yet checked: a browser with a GPU, sound, touch devices, a real network, and deployment of the WebAssembly build.</li>
+            <li>Not yet checked: a browser with a GPU, sound, touch devices and a mobile network. The site itself is deployed on Azure App Service (the details are in the repository, <code class="text-pc-yellow">docs/web/AZURE.md</code>).</li>
         </ul>
     </section>
 </div>

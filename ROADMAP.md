@@ -60,6 +60,6 @@ VGA mode 13 is 320×200 with 256 colours: one byte per pixel, a programmable pal
 - Frames from the server (C# script, the grid editor): sending raw indices plus palette was measured and is not worth it (PNG encoding 2–7 ms, raw frames 2.5× larger);
   sending only what changed would be, or moving those pages to the browser too (Roslyn is heavy in WebAssembly; Python already runs there through PySharp's `RunAsync`).
 - PySharp `RunAsync` (the suspendable evaluator) does not wait inside class bodies, `__init__`, comprehensions, f-strings, `match` or callbacks of builtins, and has no generators or coroutines without threads; extend it if a game needs them.
-- First load of a game page: the AOT runtime is ~28 MB on disk; measure it on a real network, and trim (linker, fewer assemblies) if it matters.
+- First load of a game page: 7.5 MB over the wire on the live Azure site (33 MB decoded, 90 requests); measured on a fast line, not on a mobile network. Trim (linker, fewer assemblies, lazy loading per page) if it matters.
 - Open: the QBasic editor on the site has been reported slow; the program runs as fast from the editor as from its own page in a headless
   measurement, so the cause has not been found yet. Needs a measurement in a real browser.

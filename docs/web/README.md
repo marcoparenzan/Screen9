@@ -1,6 +1,6 @@
 # Screen9 on the web
 
-> The programs that draw a screen run in the browser as WebAssembly: **[WASM.md](WASM.md)** is the detailed document (design, async games, PySharp `RunAsync`, AOT numbers, build/run/debug, how to add a page); the site's `/wasm` page is the short, reader-facing version and `/architecture` the overview.
+> The programs that draw a screen run in the browser as WebAssembly: **[WASM.md](WASM.md)** is the detailed document (with a reading order, experiments and a glossary), **[AZURE.md](AZURE.md)** how the site is published to Azure (design, async games, PySharp `RunAsync`, AOT numbers, build/run/debug, how to add a page); the site's `/wasm` page is the short, reader-facing version and `/architecture` the overview.
 
 `src/Screen9.Web`: Blazor Server (interactive server render mode, .NET 10). The same Screen9 engine and the
 same QBSharp interpreter/editor used on the desktop, served to a browser — each tab is an isolated Blazor
@@ -195,7 +195,7 @@ dotnet out/Screen9.Web.dll --urls http://localhost:5000     # or deploy the fold
 ```
 
 In development (`dotnet run`) the games work but run interpreted: use the publish to judge speed. The published `wwwroot` is about 28 MB on disk
-(the runtime and the assemblies; brotli-compressed on the wire, not measured on a real network): the first visit to a game page downloads it, later visits use the cache.
+(the runtime and the assemblies; brotli-compressed on the wire: 7.5 MB for a first visit, measured on the live Azure site): the first visit to a game page downloads it, later visits use the cache.
 
 ### Server pages: frame rate
 
@@ -213,7 +213,7 @@ and writes only the cells that changed, with no encoding step in between. The ra
 Verified with Edge headless (software rendering) driven over the DevTools protocol on the published (AOT) site: Plasma, Rally-X (title, a match, steering keys, ~30 canvas draws a second),
 Gorillas C# and Gorillas `.bas` (intro, names, a shot), with screenshots and frame counters. Automated tests: `Screen9.Tests`, `RallyX.Tests`, `Screen9.Web.Tests`
 (including `gorillas.csx` against `GorillasCore`) pass; `QBSharp.Tests` has four failures about ANSI output of the redirected CLI that do not touch this code.
-**Not verified**: a real browser with a GPU, sound (Web Audio needs a gesture and was not audible in headless), touch devices, a real network (download size and first-load time),
+**Not verified**: a real browser with a GPU, sound (Web Audio needs a gesture and was not audible in headless), touch devices, a mobile network,
 and navigating away from a game page mid-run (the components cancel their token in `Dispose`, but this was not exercised).
 
 ### Pitfalls met while doing it

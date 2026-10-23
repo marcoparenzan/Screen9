@@ -5,10 +5,37 @@ runs **in the visitor's browser**, as .NET compiled to WebAssembly. The server o
 what it costs, how to build, run, debug and verify it, and how to add a new page. It is the detailed companion of the shorter sections in
 [README.md](README.md) and of the site's `/architecture` page.
 
-Contents: [1 Why](#1-why-it-moved-to-the-browser) · [2 Overview](#2-overview) · [3 Projects and wiring](#3-projects-and-wiring) · [4 The screen](#4-the-screen-pixelscreen) ·
+Contents: [How to study this](#how-to-study-this) · [1 Why](#1-why-it-moved-to-the-browser) · [2 Overview](#2-overview) · [3 Projects and wiring](#3-projects-and-wiring) · [4 The screen](#4-the-screen-pixelscreen) ·
 [5 One thread: async games](#5-one-thread-async-games) · [6 Python: PySharp RunAsync](#6-python-pysharp-runasync) · [7 The Monaco editor](#7-the-monaco-editor) ·
 [8 Performance and size](#8-performance-and-size) · [9 Build, run, publish, deploy](#9-build-run-publish-deploy) · [10 Debugging](#10-debugging) ·
-[11 Verification](#11-verification) · [12 Adding a page](#12-adding-a-new-browser-page) · [13 Pitfalls](#13-pitfalls-met) · [14 Limits](#14-limits-and-what-is-left) · [15 File map](#15-file-map)
+[11 Verification](#11-verification) · [12 Adding a page](#12-adding-a-new-browser-page) · [13 Pitfalls](#13-pitfalls-met) · [14 Limits](#14-limits-and-what-is-left) · [15 File map](#15-file-map) · [16 Glossary](#16-glossary)
+
+---
+
+## How to study this
+
+**Reading order** (about three hours with the code open; each step builds on the one before):
+
+1. The site's **`/wasm`** page (10 minutes): what WebAssembly is, interpreted vs AOT, the measured numbers.
+2. Sections **1 and 2** here: why, and what runs where. Then the glossary (section 16) as you meet unfamiliar terms.
+3. **The screen**, in code: `src/Screen9/RgbaFrame.cs` (palette indices → RGBA), `Components/PixelBlit.cs` and `wwwroot/pixelBlit.js` (the JavaScript bridge), `Components/PixelScreen.razor` (canvas, keys, sound). Section 4 explains the three together.
+4. **The single thread**: `Components/GameClock.cs`, then `samples/csharp/RallyX/RallyXGame.cs` (`RunAsync`, `EndFrame`) and `samples/csharp/Gorilla/GorillasCore.cs` (`Wait`, `Frame`, `Rest`, `Play`, `RunAsync`). Section 5.
+5. **One finished component**: `Components/RallyXWasm.razor` (about 30 lines), then the server page `Components/Pages/RallyXPage.razor` that embeds it.
+6. **The interpreters**: `Components/BrowserBasic.cs` (QBasic) and then PySharp's `Interpretation/InterpAsync.cs` with section 6. This is the hardest part; read the `NeedsAsync` and `CallAsync` methods first.
+7. **The editor**: `Components/EditorMonacoWasm.razor`, section 7.
+8. **Build and numbers**: `Screen9.Web.Client.csproj`, `Program.cs`, `ops/run-site.ps1`, sections 8 and 9, then [AZURE.md](AZURE.md).
+
+**Experiments** (each takes minutes and teaches one thing; use `pwsh ops\run-site.ps1`, section 9, for the fast build):
+
+| Try | You will see |
+|---|---|
+| Run `dotnet run --project src\Screen9.Web` and open `/plasma-demo`, then the same page from `ops\run-site.ps1` | ~22 vs 60 frames a second: the interpreter against AOT, same code |
+| In `GameClock.Delay`, replace `await Task.Yield()` with `await Task.CompletedTask`, publish, open Rally-X and press keys under load | Keys and painting starve when a game is behind schedule: the reason for the yield |
+| In `GorillasWasm.razor`, replace `Delay = …` with `Sleep = Thread.Sleep` (and remove `Delay`/`ToneAsync`) | The page freezes in the first pause: a blocking wait on the only thread |
+| Run `ops\browser-drive.mjs` against a page with the `putImageData` counter from its header | Frame rate measured by a program, not by eye |
+| Add a `Console.WriteLine` to `RgbaFrame.Fill` and look at the browser console | Where .NET `Console` output goes in WebAssembly |
+| Publish twice, once after adding a project reference, **without** deleting `obj\Release` | The stale AOT cache: `mono_wasm_load_runtime failed` |
+| Run a Python script with a `sleep` in a class body (`__init__`) in the editor | A wait that does not suspend (section 6, "What does not wait") |
 
 ---
 
@@ -229,7 +256,7 @@ Measured on a published AOT build (before the editor's QBS support was added, so
 | `System.Private.CoreLib.wasm` | 2.0 MB raw, 0.45 MB brotli |
 | `PySharpLib.wasm` | 1.1 MB raw, 0.2 MB brotli |
 
-The publish produces the `.br` and `.gz` files next to every asset. The first visit to any browser page downloads the runtime (the cost is per origin, not per page); later visits use the cache. **Not measured:** first-load time on a real network.
+The publish produces the `.br` and `.gz` files next to every asset. The first visit to any browser page downloads the runtime (the cost is per origin, not per page); later visits use the cache. **Live, on Azure** (2026-10-23): a first visit to the plasma page transferred **7.53 MB in 90 requests** (33.2 MB decoded; `dotnet.native.wasm` 5.1 MB), and the first fps reading came about 13 s after launching a headless browser on a fast line (a figure that includes the browser starting and a 2-second polling step). A mobile network was not tried.
 
 ## 9. Build, run, publish, deploy
 
@@ -304,8 +331,8 @@ The published site runs in the `Production` environment by default and serves it
 
 ### Deploy
 
-The repository has publish profiles for Azure App Service (`Properties\PublishProfiles`: Web Deploy, Zip Deploy, FTP). The published output is self-contained pages plus the `_framework` files; the host must serve `.wasm` with its MIME type and may serve the precompressed `.br`/`.gz`.
-**Not verified:** a deployment of the WebAssembly build to App Service, and its caching headers.
+Deployed to **Azure App Service** on 2026-10-23 from the command line with the Azure CLI; the full procedure, the numbers measured on the live site, rollback and pitfalls are in **[AZURE.md](AZURE.md)**. In short:
+`dotnet publish -p:PublishProfile=…` builds the AOT site but **cannot upload** (the saved password belongs to Visual Studio: *Failed to retrieve credentials*); publish to a folder, zip it and `az webapp deploy --type zip --clean true`. The live site serves the precompressed `.br` files (first visit: 90 requests, **7.5 MB transferred**, 33 MB decoded; the plasma at 61 fps).
 
 ## 10. Debugging
 
@@ -341,10 +368,10 @@ Headless virtual time (`--virtual-time-budget`) makes in-page seconds meaningles
 | Plasma 60 fps; Rally-X title, a match, steering keys, ~30 draws a second | A real browser with a GPU |
 | Gorillas C#: intro, names, a shot | Sound (Web Audio needs a gesture; nothing was audible in headless) |
 | `GORILLA.BAS`: intro, names, first prompt, a shot | Touch devices |
-| Gorillas Python: intro with its sparkles, a shot, ~44 draws/s in flight | First-load time on a real network |
+| Gorillas Python: intro with its sparkles, a shot, ~44 draws/s in flight | Mobile networks, a CDN or a custom domain in front |
 | Editor (dev build): Monaco loads with the samples; `hello.bas` in QBS prints `Hello, QBSharp`; `gorillas.py` and `GORILLA.BAS` run from it; Stop ends a run | `Save` across a reload, `Reset`, `New`, the QBS `Ui` dialogs, the editor on the AOT build |
 | Header and side navigation stay in view while scrolling | Leaving a game page mid-run (tokens are cancelled in `Dispose`; not exercised) |
-| | Deployment to App Service; Visual Studio debugging (section 10) |
+| Azure App Service, live site (2026-10-23, [AZURE.md](AZURE.md)): all pages `200`, Plasma `webassembly` at 61 fps, 7.53 MB / 90 requests on a first visit | Deployment with Visual Studio's own profiles; Visual Studio debugging (section 10) |
 
 ## 12. Adding a new browser page
 
@@ -405,7 +432,7 @@ Headless virtual time (`--virtual-time-budget`) makes in-page seconds meaningles
 - **PySharp `RunAsync`** does not suspend inside class bodies, `__init__`, comprehensions, f-strings, `match`, decorators or builtin callbacks, and has no generators or coroutines without threads. Extend it if a game needs them (`async def` could run on the same machinery).
 - **The QBS dialect** in the browser has no files and no Ralf, and its `Ui` uses `prompt`/`alert`.
 - **No browser tests in the repository.** `ops/browser-drive.mjs` is a driver, not a test suite.
-- **Unverified:** a GPU browser, sound, touch, a real network, deployment, Visual Studio debugging.
+- **Unverified:** a GPU browser, sound, touch, a mobile network, a build pipeline that deploys, Visual Studio debugging.
 - **The server's PNG path** (C# script, grid editor) is capped at about 30 frames a second with one frame in flight (so it follows the round trip); sending raw indices plus palette instead was measured and rejected (encoding costs 2–7 ms per frame on a worst-case frame, raw frames would be 2.5 times larger). The console renderer already reads the raw pixels and the palette directly.
 
 ## 15. File map
@@ -430,4 +457,40 @@ Headless virtual time (`--virtual-time-budget`) makes in-page seconds meaningles
 | `src/Screen9.Web/Components/Pages/Architecture.razor` | the site's summary of this document |
 | `src/Screen9.Web.Tests/PythonGamesTests.cs`, `CsxGamesTests.cs`, `SiteNavigationTests.cs` | tests touching this design |
 | `ops/browser-drive.mjs` | headless browser driver (DevTools protocol) |
+| `ops/run-site.ps1` | publish with AOT, tuned for local use, and run |
+| `docs/web/AZURE.md` | publishing to Azure App Service |
 | `LocalFeed/PySharp.Interpreter.2.6.0.nupkg` | PySharp with `RunAsync`; source in the PySharp repository (`Interpretation/InterpAsync.cs`) |
+
+## 16. Glossary
+
+| Term | Meaning |
+|---|---|
+| **WebAssembly (Wasm)** | A compact binary format every browser runs in a sandbox next to JavaScript. One thread here, no files, no sockets. |
+| **Blazor Server** | The page's C# runs in the server; the browser is a thin client and every event and screen update travels over a SignalR (WebSocket) connection. |
+| **Blazor WebAssembly** | The page's C# runs in the browser, as .NET compiled to Wasm; no per-event network trip. |
+| **Render mode** | Where a Blazor component runs: `InteractiveServer`, `InteractiveWebAssembly`, or static (rendered once by the server). A page can mix static content with interactive **islands**. |
+| **Island** | One interactive component embedded in an otherwise static server-rendered page (`<RallyXWasm @rendermode="…" />`). |
+| **Prerender** | Rendering a component once on the server before it becomes interactive; switched off here (`prerender: false`) because a running program has nothing to show before it runs. |
+| **SignalR** | The ASP.NET Core library behind Blazor Server's connection (WebSockets, with fallbacks). |
+| **IL** | Intermediate Language: what every .NET compiler produces, in assemblies (`.dll`). Portable, not machine code. |
+| **Mono runtime** | The .NET runtime used in the browser (`dotnet.native.wasm`): loads assemblies and runs them. |
+| **Interpreter** | The runtime executes IL step by step. The default in the browser. About 25 times slower here. |
+| **AOT** | Ahead-of-time compilation: methods are compiled to Wasm at build time (on `publish`, needs the `wasm-tools` workload) and live inside `dotnet.native.wasm`. |
+| **LLVM / emcc / wasm-ld / wasm-opt (binaryen)** | The toolchain the AOT build uses: the Mono AOT compiler emits LLVM bitcode, `emcc` (Emscripten) compiles and links it into one Wasm file, `wasm-opt` optimises the result. |
+| **Webcil** | The packaging that wraps .NET assemblies in `.wasm` files (so firewalls that block `.dll` downloads do not interfere). On by default. |
+| **ILLink / trimming** | A build step that removes code nothing uses, to shrink the download. Required for AOT. |
+| **Brotli / gzip** | Compression applied at publish to each asset (`.br`, `.gz` next to the file); the browser picks one and the server sends it. |
+| **JS interop** | Calling between C# and JavaScript. `IJSRuntime` (from Razor components) and `[JSImport]`/`[JSExport]` (a generated, faster bridge, used by `PixelBlit`). |
+| **MemoryView** | A JS view onto Wasm memory that `[JSImport]` can offer for `Span<byte>`; it failed in this runtime, so a `byte[]` (a copy) is passed instead. |
+| **`requestAnimationFrame`** | The browser's callback, once per display refresh; paces the Plasma. |
+| **`async`/`await`, `ValueTask`** | C#'s way of waiting without a thread. `ValueTask` avoids an allocation when the result is already available: the reason `Run()` can still run synchronously. |
+| **`Task.Yield()`** | Gives the browser a turn (to paint and read keys) before the code continues. |
+| **Host** | The object a game talks to for the outside world (screen, keys, waiting, sound): the same game runs in a window, in tests and in a page by swapping the host. |
+| **`PCCanvas`** | The engine's frame buffer: one palette index per pixel plus a palette (EGA/VGA). **DAC** is the VGA palette; changing it recolours the screen without touching a pixel (the plasma's trick). |
+| **RGBA frame** | Four bytes per pixel (red, green, blue, alpha): what a browser canvas wants. `RgbaFrame` makes it from indices and palette. |
+| **PySharp `RunAsync`** | The suspendable evaluator of the Python interpreter: awaits .NET methods that return tasks (section 6). |
+| **Static web assets** | Files of a project (and of referenced projects) that the server serves from `wwwroot`-like paths; fingerprinted names make them cacheable forever. |
+| **Content root** | The folder an ASP.NET Core app reads its `wwwroot` and settings from. |
+| **App Service** | Azure's managed web hosting; `Zip Deploy`/`Web Deploy`/`FTP` are ways to upload to it ([AZURE.md](AZURE.md)). |
+| **DevTools protocol (CDP)** | The protocol a browser exposes with `--remote-debugging-port`; `ops/browser-drive.mjs` uses it to type, evaluate and screenshot. |
+| **Workload** | An optional SDK component installed with `dotnet workload install`; here `wasm-tools` (Emscripten, binaryen and the AOT cross-compiler). |
