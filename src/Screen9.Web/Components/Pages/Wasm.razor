@@ -1,0 +1,128 @@
+@page "/wasm"
+
+<PageTitle>WebAssembly and AOT — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-12">
+    <header class="flex flex-col gap-3">
+        <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">Screen9 · WebAssembly</div>
+        <h1 class="text-3xl font-bold text-pc-white">.NET in your browser, and why AOT matters</h1>
+        <p class="text-pc-gray">
+            The games on this site are ordinary C# (and Python and QBasic) programs. They run <span class="text-pc-white">inside your browser</span>, not on a server, because
+            .NET can be compiled to WebAssembly. This page explains what that means, the two ways .NET can run there, what ahead-of-time (AOT) compilation changes, and what it
+            cost us. The full engineering notes are in
+            <a href="https://github.com/marcoparenzan/Screen9/blob/HEAD/docs/web/WASM.md" class="text-pc-brightcyan underline hover:text-pc-yellow">docs/web/WASM.md</a>.
+        </p>
+    </header>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">1 · What WebAssembly is</h2>
+        <p class="text-sm">
+            WebAssembly (Wasm) is a compact binary instruction format that every modern browser can run, safely and at close to native speed, next to JavaScript. A program is not
+            downloaded as source: it is a <code class="text-pc-yellow">.wasm</code> file the browser validates and executes in a sandbox. It cannot touch your files, processes or
+            network except through what the page gives it. That is also why code you type in the <a href="/editor-monaco" class="text-pc-brightcyan underline hover:text-pc-yellow">Monaco editor</a>
+            here runs in your browser and never reaches our server.
+        </p>
+        <p class="text-sm">
+            A Wasm program has <span class="text-pc-white">one thread</span> in this setup, no sockets and no processes. That single fact shapes the rest of this page.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">2 · .NET in WebAssembly</h2>
+        <p class="text-sm">
+            Blazor WebAssembly downloads three kinds of things the first time you open a page with a program on it:
+        </p>
+        <ul class="list-disc pl-5 text-sm">
+            <li>the <span class="text-pc-white">.NET runtime</span>, compiled to Wasm (<code class="text-pc-yellow">dotnet.native.wasm</code>);</li>
+            <li>the <span class="text-pc-white">libraries</span> your code uses, as assemblies (the Screen9 engine, the games, the QBasic and Python interpreters);</li>
+            <li>a little JavaScript that starts it all and connects it to the page (the canvas, the keyboard, sound).</li>
+        </ul>
+        <p class="text-sm">
+            The assemblies contain <span class="text-pc-white">IL</span>, the portable intermediate language every .NET compiler produces. The runtime has to turn IL into something the machine can
+            run. In the browser there are two ways to do it.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">3 · Interpreted, or ahead of time</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="text-pc-white">
+                    <tr>
+                        <th class="border-b border-pc-darkgray py-1 pr-4"></th>
+                        <th class="border-b border-pc-darkgray py-1 pr-4">Interpreted (the default)</th>
+                        <th class="border-b border-pc-darkgray py-1">AOT (ahead of time)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td class="py-1 pr-4 text-pc-white">What runs</td><td class="py-1 pr-4">The runtime reads the IL and executes it step by step.</td><td class="py-1">Your methods were already compiled to Wasm at build time; the runtime just calls them.</td></tr>
+                    <tr><td class="py-1 pr-4 text-pc-white">Build</td><td class="py-1 pr-4">Seconds.</td><td class="py-1">A few minutes (it compiles the whole runtime and every library).</td></tr>
+                    <tr><td class="py-1 pr-4 text-pc-white">Speed</td><td class="py-1 pr-4">Slow for tight loops.</td><td class="py-1">Much faster: here, about 25 times on a pixel loop.</td></tr>
+                    <tr><td class="py-1 pr-4 text-pc-white">Download</td><td class="py-1 pr-4">Smaller.</td><td class="py-1">Larger (the compiled code is in <code class="text-pc-yellow">dotnet.native.wasm</code>).</td></tr>
+                    <tr><td class="py-1 pr-4 text-pc-white">Needs</td><td class="py-1 pr-4">Nothing special.</td><td class="py-1">The <code class="text-pc-yellow">wasm-tools</code> workload, and <code class="text-pc-yellow">dotnet publish</code>.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-sm">
+            A game redraws its screen up to sixty times a second, and a plasma touches every one of 64,000 pixels each time. Interpreted, that is the difference between a slideshow and a
+            game. AOT is a switch in the project file (<code class="text-pc-yellow">RunAOTCompilation</code>) that only takes effect when you <span class="text-pc-white">publish</span>.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">4 · What we measured on this site</h2>
+        <p class="text-sm">The plasma demo, in headless Edge, one step of the program and the frames drawn each second:</p>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="text-pc-white">
+                    <tr><th class="border-b border-pc-darkgray py-1 pr-4">Build</th><th class="border-b border-pc-darkgray py-1 pr-4">One step</th><th class="border-b border-pc-darkgray py-1">Frames a second</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td class="py-1 pr-4">Blazor Server (frames as PNG over the network)</td><td class="py-1 pr-4">n/a</td><td class="py-1">~5</td></tr>
+                    <tr><td class="py-1 pr-4">WebAssembly, interpreted</td><td class="py-1 pr-4">28 ms</td><td class="py-1">~22</td></tr>
+                    <tr><td class="py-1 pr-4">WebAssembly, AOT</td><td class="py-1 pr-4">1.1 ms</td><td class="py-1 text-pc-brightgreen">60</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-sm">
+            Switching a Release build on did not help the interpreted version (23–25 frames a second): the interpreter is the limit, not the optimisation level of our code. The other programs
+            on AOT: Rally-X holds its 30 frames a second, and the Python version of Gorillas draws about 44 a second during a banana flight, close to the game's own ceiling of about 50.
+        </p>
+        <p class="text-sm">
+            The price: the published runtime is about 29.8 MB on disk and <span class="text-pc-white">6.5 MB over the wire</span> with Brotli compression, downloaded once per visitor and then cached.
+            The first load on a real network has not been measured yet.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">5 · One thread, so nothing may block</h2>
+        <p class="text-sm">
+            A game that pauses with <code class="text-pc-yellow">Thread.Sleep</code> would freeze the whole page, keys and painting included. The C# games therefore wait with
+            <code class="text-pc-yellow">await</code>: the browser keeps painting while the game sleeps. The QBasic interpreter was already written that way. The Python interpreter, PySharp,
+            had to learn it: it now has a second evaluator, <code class="text-pc-yellow">RunAsync</code>, that runs a script on the page's own thread and awaits a .NET method that returns a task, so the host's
+            <code class="text-pc-yellow">sleep</code> does not block. The details are on the <a href="/architecture" class="text-pc-brightcyan underline hover:text-pc-yellow">Architecture</a> page.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">6 · Try it, and build it yourself</h2>
+        <p class="text-sm">
+            <code class="text-pc-yellow">dotnet run</code> works but runs the interpreted build, so the programs feel slow. For the fast one, publish and run the result:
+        </p>
+        <pre class="overflow-x-auto rounded border border-pc-darkgray p-3 text-xs text-pc-gray">dotnet workload install wasm-tools      # once per machine
+dotnet publish src\Screen9.Web\Screen9.Web.csproj -c Release -o ops\artifacts\site
+dotnet ops\artifacts\site\Screen9.Web.dll --urls http://localhost:5280</pre>
+        <p class="text-sm">
+            The first publish takes about three and a half minutes. Stop any running copy of the site first: it locks the files the publish needs.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">7 · What is not done</h2>
+        <ul class="list-disc pl-5 text-sm">
+            <li>The C# script game and the character-grid editor still run on the server: the Roslyn compiler is too large to load in a browser page.</li>
+            <li>Only a published build is fast; <code class="text-pc-yellow">dotnet run</code> and the Visual Studio debugger run interpreted code.</li>
+            <li>Not yet checked: a browser with a GPU, sound, touch devices, a real network, and deployment of the WebAssembly build.</li>
+        </ul>
+    </section>
+</div>

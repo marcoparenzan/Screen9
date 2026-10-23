@@ -1,5 +1,7 @@
 # Screen9 on the web
 
+> The programs that draw a screen run in the browser as WebAssembly: **[WASM.md](WASM.md)** is the detailed document (design, async games, PySharp `RunAsync`, AOT numbers, build/run/debug, how to add a page); the site's `/wasm` page is the short, reader-facing version and `/architecture` the overview.
+
 `src/Screen9.Web`: Blazor Server (interactive server render mode, .NET 10). The same Screen9 engine and the
 same QBSharp interpreter/editor used on the desktop, served to a browser — each tab is an isolated Blazor
 circuit, that is an independent session.

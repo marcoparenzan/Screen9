@@ -22,7 +22,7 @@ Read the [story](HISTORY.md) and the [roadmap](ROADMAP.md), browse the [document
 | **Engine** | `src/Screen9`, `src/Screen9.Tests` | An indexed CGA/EGA/VGA machine (`PCCanvas`), IBM ROM fonts, video ports and memory, a double-buffered Windows renderer and an ANSI truecolor one. Used directly from C#. |
 | **QBSharp** | `src/QBSharp.*` | The language: a QBasic interpreter and the modern qbs dialect, CLI and editor (`qbs`), standard library, AI. Built on the engine; it can run whole games or script a C# game. |
 | **Python** | `src/Screen9.Python`, `samples/python` | The `screen9` package for PySharp (a Python interpreter in .NET): a wheel containing `Screen9.dll`, installed with `pysharp install`. |
-| **Web** | `src/Screen9.Web` | The same engine and the same QBSharp (interpreter and editor) in a Blazor site (Server, with the games running in the browser as WebAssembly): Gorillas in C#, Gorillas `.bas`, Rally-X, a TUI editor and a Monaco editor with Ralf. See [docs/web](docs/web/README.md). |
+| **Web** | `src/Screen9.Web` | The same engine and the same QBSharp (interpreter and editor) in a Blazor site (Server, with the games running in the browser as WebAssembly): Gorillas in C#, Gorillas `.bas`, Rally-X, a TUI editor and a Monaco editor with Ralf. See [docs/web](docs/web/README.md) (and [docs/web/WASM.md](docs/web/WASM.md) for the WebAssembly design). |
 
 The single solution is [Screen9.slnx](Screen9.slnx), with the folders `engine`, `qbsharp`, `samples` and `web`.
 QBSharp uses the engine as a project reference: no intermediate packages.

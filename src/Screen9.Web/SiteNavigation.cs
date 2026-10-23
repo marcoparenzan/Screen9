@@ -22,6 +22,7 @@ public static class SiteNavigation
             new("Mode 9 history", "/history", "From QBasic's SCREEN 9 to the engine and the web"),
             new("Library", "/library", "Coding Guide", "/libreria"),
             new("Architecture", "/architecture", "Server, WebAssembly, async games"),
+            new("WebAssembly and AOT", "/wasm", ".NET in the browser, and why AOT"),
             new("Roadmap", "/roadmap", "Mode 13, sprites, more games, speed"),
         ]),
         new("Gorilla Scripted",
