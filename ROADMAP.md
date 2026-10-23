@@ -47,9 +47,9 @@ VGA mode 13 is 320×200 with 256 colours: one byte per pixel, a programmable pal
 ## 4. Performance improvements
 
 **Today**
-- `PutPixels` writes a 640×480 frame in about 5 ms (against 45 ms for `PutImage`); the site and the games run at 30 frames a second.
+- `PutPixels` writes a 640×480 frame in about 5 ms (against 45 ms for `PutImage`); the games run at 30 frames a second, in the browser as WebAssembly (the plasma at 60 with AOT; interpreted it is ~22).
 - GORILLA.BAS pauses are brought back to their intended length by a calibration of the interpreter's speed (`QBS_TIMER_WAIT_SCALE=auto`).
-- Benchmarks exist for the editor (`QBSharp.Benchmarks`); the frame transport to the browser is one indexed PNG per frame, latest frame wins.
+- Benchmarks exist for the editor (`QBSharp.Benchmarks`); the pages still on the server (Python, C# script, editors) send one indexed PNG per frame at ~30 Hz, latest frame wins.
 
 **Next**
 - `PutImage`, `Box` and the fills on the fast path that `PutPixels` already uses, instead of `PSet` pixel by pixel.
@@ -57,6 +57,8 @@ VGA mode 13 is 320×200 with 256 colours: one byte per pixel, a programmable pal
 - The interpreter: the AST walk is the cost of QBasic programs; look at caching and cheaper dispatch for the hot statements.
 - Debug builds: the engine is several times slower unoptimised (45 ms against 5 ms for a Rally-X frame). Optimise the libraries in Debug too,
   or warn when the site is started that way.
-- Frames to the browser: send only what changed, or a raw palette plus indices, instead of a full PNG every time.
+- Frames from the server (Python, C# script, editors): sending raw indices plus palette was measured and is not worth it (PNG encoding 2–7 ms, raw frames 2.5× larger);
+  sending only what changed would be, or moving those pages to the browser too (PySharp needs an async `sleep`; Roslyn is heavy in WebAssembly).
+- First load of a game page: the AOT runtime is ~28 MB on disk; measure it on a real network, and trim (linker, fewer assemblies) if it matters.
 - Open: the QBasic editor on the site has been reported slow; the program runs as fast from the editor as from its own page in a headless
   measurement, so the cause has not been found yet. Needs a measurement in a real browser.

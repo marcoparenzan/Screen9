@@ -47,6 +47,9 @@ dotnet run -c Release samples/csharp/RallyX/RallyX.cs -- --demo                #
 dotnet run --project src/Screen9.Web -c Release
 ```
 
+The games and demos run in the browser (WebAssembly), but only an AOT build is fast: `dotnet run` interprets the .NET code (Plasma ~22 fps), `dotnet publish` compiles it (60 fps).
+One-off: `dotnet workload install wasm-tools`, then `dotnet publish src/Screen9.Web -c Release -o out` and run `dotnet out/Screen9.Web.dll` (details in [docs/web](docs/web/README.md)).
+
 Open the printed address. Pages: Gorillas (C#, `.bas`, Python, C# script), Rally-X (`/rally-x`), the QBSharp editor (TUI) and a Monaco editor
 that picks the interpreter from the file extension (`.bas` QBSharp, `.py` PySharp, `.csx` C# scripting). Click the screen before typing.
 Python and C# written in Monaco run inside the server process, so they are enabled only in the `Development` environment or with
@@ -68,7 +71,8 @@ string key = window.ReadKey();                         // INKEY$-style: "" when 
 ```
 
 Games talk to the outside world through a small host object (screen, keys, sleep, sound) so the same game runs in a window and in the
-browser: see `GorillasHost` and `RallyXHost`.
+browser: see `GorillasHost` and `RallyXHost`. In a window the game calls `Run()` and the host sleeps (`Sleep`); in the browser there is no thread to block, so
+the game calls `RunAsync()` and the host provides an awaitable `Delay`. `RgbaFrame.Fill(canvas, buffer)` expands a frame into RGBA bytes for a host that draws pixels itself.
 
 ## Troubleshooting
 

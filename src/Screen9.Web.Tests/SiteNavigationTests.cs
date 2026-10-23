@@ -34,6 +34,7 @@ public class SiteNavigationTests
     [InlineData("/library", "Screen9", "Library")]
     [InlineData("/libreria", "Screen9", "Library")]
     [InlineData("/history", "Screen9", "Mode 9 history")]
+    [InlineData("/architecture", "Screen9", "Architecture")]
     [InlineData("/roadmap", "Screen9", "Roadmap")]
     [InlineData("/editor-monaco?file=gorillas.py", "Gorilla Scripted", "Monaco Editor")]
     [InlineData("/Rally-X/", "C# Games", "Rally-X")]

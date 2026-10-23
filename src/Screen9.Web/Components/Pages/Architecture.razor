@@ -1,0 +1,113 @@
+@page "/architecture"
+
+<PageTitle>Architecture — Screen9</PageTitle>
+
+<div class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-12">
+    <header class="flex flex-col gap-3">
+        <div class="text-sm font-bold uppercase tracking-wide text-pc-brightblue">Screen9 · Architecture</div>
+        <h1 class="text-3xl font-bold text-pc-white">How this site is built</h1>
+        <p class="text-pc-gray">
+            The same engine runs in a terminal, in a Windows pixel window and here. On this site the server only serves the pages: the programs that
+            draw a screen in real time run <span class="text-pc-white">in your browser</span>, as WebAssembly. The detailed version is
+            <a href="https://github.com/marcoparenzan/Screen9/blob/HEAD/docs/web/README.md" class="text-pc-brightcyan underline hover:text-pc-yellow">docs/web</a>
+            in the repository.
+        </p>
+    </header>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">1 · Why it moved to the browser</h2>
+        <p class="text-sm">
+            It started as Blazor Server: the game ran in the server and every frame travelled to you. A game cannot go faster than that round trip allows,
+            and the keys had to make it in the opposite direction.
+        </p>
+        <pre class="overflow-x-auto rounded border border-pc-darkgray p-3 text-xs text-pc-gray">Before (Blazor Server)
+
+  game ──► PCCanvas ──► PNG encode ──► SignalR ──► browser canvas      ~5 fps
+    ▲                                                   │
+    └──────────────────── key (SignalR) ◄───────────────┘
+
+Now (Blazor WebAssembly)
+
+  browser:  game ──► PCCanvas ──► RGBA buffer ──► canvas ImageData     30–60 fps
+              ▲                                       (no network)
+              └── key (in the page)
+
+  server:   serves the page, the code listing and the WebAssembly files</pre>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">2 · What runs where</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="text-pc-white">
+                    <tr><th class="border-b border-pc-darkgray py-1 pr-4">Page</th><th class="border-b border-pc-darkgray py-1 pr-4">Runs in</th><th class="border-b border-pc-darkgray py-1">Notes</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td class="py-1 pr-4"><a href="/plasma-demo" class="text-pc-brightcyan underline hover:text-pc-yellow">Plasma</a>, <a href="/scene-demo" class="text-pc-brightcyan underline hover:text-pc-yellow">Scene</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">Driven by the display's own refresh.</td></tr>
+                    <tr><td class="py-1 pr-4"><a href="/rally-x" class="text-pc-brightcyan underline hover:text-pc-yellow">Rally-X</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">The C# game, 30 frames a second.</td></tr>
+                    <tr><td class="py-1 pr-4"><a href="/gorillas-csharp" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (C#)</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">The same game as the desktop window.</td></tr>
+                    <tr><td class="py-1 pr-4"><a href="/gorillas-bas" class="text-pc-brightcyan underline hover:text-pc-yellow">Gorillas (.bas)</a></td><td class="py-1 pr-4 text-pc-brightgreen">Browser</td><td class="py-1">The 1990 original, on the QBSharp interpreter.</td></tr>
+                    <tr><td class="py-1 pr-4"><a href="/gorillas-python" class="text-pc-brightcyan underline hover:text-pc-yellow">Python</a>, <a href="/gorillas-csx" class="text-pc-brightcyan underline hover:text-pc-yellow">C# script</a></td><td class="py-1 pr-4 text-pc-yellow">Server</td><td class="py-1">Frames travel as PNG, about 30 a second at most.</td></tr>
+                    <tr><td class="py-1 pr-4"><a href="/editor" class="text-pc-brightcyan underline hover:text-pc-yellow">Editors</a></td><td class="py-1 pr-4 text-pc-yellow">Server</td><td class="py-1">They run the programs you type, which stay in the server.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-sm">
+            Python stays on the server because its <code class="text-pc-yellow">sleep</code> blocks a thread and the browser has only one; C# script because the compiler (Roslyn) is large
+            and slow to load in WebAssembly.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">3 · The pieces</h2>
+        <ul class="list-disc pl-5 text-sm">
+            <li><code class="text-pc-yellow">Screen9</code>: the engine. <code class="text-pc-yellow">PCCanvas</code> holds the palette indices and the palette; <code class="text-pc-yellow">RgbaFrame</code> expands the visible frame into RGBA bytes, with no allocation per frame.</li>
+            <li><code class="text-pc-yellow">Screen9.Web.Client</code>: the WebAssembly project. <code class="text-pc-yellow">PixelScreen</code> is the screen (canvas, keyboard, Web Audio); one component per page runs the game.</li>
+            <li><code class="text-pc-yellow">Screen9.Web</code>: the Blazor Server site. A page is rendered by the server and embeds the WebAssembly component as an island.</li>
+            <li>The games are shared with the desktop: the same <code class="text-pc-yellow">GorillasGame</code> and <code class="text-pc-yellow">RallyXGame</code>, with a different <span class="text-pc-white">host</span> (screen, keys, waiting, sound).</li>
+        </ul>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">4 · No thread to sleep on</h2>
+        <p class="text-sm">
+            A browser runs .NET on a single thread, so a game that pauses with <code class="text-pc-yellow">Thread.Sleep</code> would freeze the page. The games now have an
+            async entry point: <code class="text-pc-yellow">RunAsync()</code> awaits a <code class="text-pc-yellow">Delay</code> supplied by the host. In a window the old
+            <code class="text-pc-yellow">Run()</code> is unchanged: with no <code class="text-pc-yellow">Delay</code> every wait completes at once. Even a wait of zero
+            yields to the browser, so a game that is late still lets the page paint and read keys.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">5 · Ahead-of-time compilation</h2>
+        <p class="text-sm">
+            .NET in WebAssembly interprets its code unless it is compiled in advance. On the plasma, in headless Edge:
+        </p>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="text-pc-white">
+                    <tr><th class="border-b border-pc-darkgray py-1 pr-4">Build</th><th class="border-b border-pc-darkgray py-1 pr-4">One step</th><th class="border-b border-pc-darkgray py-1">Frames a second</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td class="py-1 pr-4">Blazor Server (PNG over SignalR)</td><td class="py-1 pr-4">n/a</td><td class="py-1">~5</td></tr>
+                    <tr><td class="py-1 pr-4">WebAssembly, interpreted (<code class="text-pc-yellow">dotnet run</code>)</td><td class="py-1 pr-4">28 ms</td><td class="py-1">~22</td></tr>
+                    <tr><td class="py-1 pr-4">WebAssembly, AOT (<code class="text-pc-yellow">dotnet publish</code>)</td><td class="py-1 pr-4">1.1 ms</td><td class="py-1 text-pc-brightgreen">60</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-sm">
+            Publishing takes a few minutes and needs <code class="text-pc-yellow">dotnet workload install wasm-tools</code>. The price is size: the published runtime is about 28 MB
+            on disk (compressed on the wire), downloaded once on the first visit to a game page.
+        </p>
+    </section>
+
+    <section class="flex flex-col gap-3">
+        <h2 class="text-xl font-bold text-pc-white">6 · What was measured and what was not</h2>
+        <p class="text-sm">
+            Checked in headless Edge on the published build: the plasma, Rally-X, Gorillas in C# and the 1990 <code class="text-pc-yellow">GORILLA.BAS</code>, with
+            screenshots and frame counters. Not yet checked: a real browser with a GPU, sound, touch, a real network (first-load time), and leaving a game page
+            mid-run. For the pages that stay on the server, sending raw pixels instead of PNG was measured and rejected: encoding costs 2–7 ms, and raw frames would be
+            2.5 times larger. The terminal never needed it: it already reads the raw pixels and the palette directly.
+        </p>
+    </section>
+</div>

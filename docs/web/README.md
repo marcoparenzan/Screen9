@@ -33,6 +33,7 @@ Pages, reachable from the home page (`/` is the introduction, `/history` tells t
 - **`/gorillas-python`** — `samples/python/Gorilla/gorillas.py`, the same file as `pysharp run`, run by
   PySharp embedded in the server (`PySharp.Interpreter` from `LocalFeed/`): the site passes the screen, the keyboard and
   the speaker as the `web_host` variable (`PythonGameHost`), and an in-memory `screen9` module on top of the engine.
+- **`/architecture`** — how the site is built: the server, the WebAssembly islands, the async games, the AOT numbers (the page version of the section below).
 - **`/history`**, **`/library`**, **`/roadmap`** — the Mode 9 history, the Coding Guide (runnable mode 9 snippets), and the roadmap.
 - **`/plasma-demo`**, **`/scene-demo`** — the demos of `samples/csharp/Demos` (`Screen9.DemosCore`): a VGA mode 13 plasma with palette cycling, and the
   cell canvas. Each page shows the code.
@@ -76,6 +77,114 @@ Pages, reachable from the home page (`/` is the introduction, `/history` tells t
   layout. JavaScript organised in ES6 classes (`PixelCanvas`, `KeyCapture`, `ToneBeeper`,
   `MonacoHost`), not loose functions.
 
+## Running in the browser (WebAssembly)
+
+Why: with Blazor Server every frame went program → server → PNG → SignalR → browser, and every key the opposite way, so a game
+could not run faster than the round trip allowed (about 5 frames a second once the web cap was lowered). The programs that draw
+a screen in real time now run **in the browser**; the server only serves the page. The same story, with a diagram, is on the site's
+**Architecture** page (`/architecture`).
+
+### What runs where
+
+| Page | Runs in | How |
+|---|---|---|
+| `/plasma-demo`, `/scene-demo` | browser | `PlasmaWasm`, `SceneWasm` |
+| `/rally-x` | browser | `RallyXWasm` (`RallyXGame.RunAsync`) |
+| `/gorillas-csharp` | browser | `GorillasWasm` (`GorillasGame.RunAsync`) |
+| `/gorillas-bas` | browser | `BasicWasm` (`QBasicEngine`, the page passes the source as a parameter) |
+| `/gorillas-python`, `/gorillas-csx` | server | PySharp / Roslyn, PNG frames |
+| `/editor`, `/editor-monaco` | server | they run the user's programs, which must stay in the server |
+
+Python stays on the server because its `sleep` blocks a thread (the browser has one thread, and PySharp is an external package that
+cannot be made async from here); C# script because Roslyn is large and slow to load in WebAssembly. Moving them is possible later, not needed now.
+
+### Project layout
+
+- `src/Screen9.Web.Client` — `Microsoft.NET.Sdk.BlazorWebAssembly`, references `Screen9`, `Screen9.DemosCore`, `RallyXCore`,
+  `GorillasCore` and `QBSharp.QBasic`. It holds the components above, `BrowserKeyboard`/`BrowserKeyEvent` (namespace `Screen9.Web`, moved from the
+  server project) and the shared scripts `keyCapture.js`, `toneBeeper.js` (moved from the server's `wwwroot/js`, same URLs) and `pixelBlit.js`.
+- `src/Screen9.Web` references it, calls `AddInteractiveWebAssemblyComponents()` / `AddInteractiveWebAssemblyRenderMode()` and adds the client
+  assembly to the router (`AdditionalAssemblies` in `Routes.razor`, `AddAdditionalAssemblies` in `Program.cs`). The packages
+  `Microsoft.AspNetCore.Components.WebAssembly(.Server)` are pinned to 10.0.13: 10.0.0 has known high-severity advisories, and the solution treats warnings as errors.
+- A server page embeds a component as an island: `<GorillasWasm @rendermode="new InteractiveWebAssemblyRenderMode(prerender: false)" />`. The text of the page
+  (description, listing of the code) is static server-rendered; `prerender: false` because a game has nothing to show before it runs.
+- `tailwind.css` also scans `../Screen9.Web.Client/**/*.razor`, so the classes used in the client components are generated.
+
+### The screen: `PixelScreen`
+
+`PixelScreen` is the browser counterpart of `PixelDisplay` (which stays, for the server pages). It owns a `<canvas>`, the keyboard
+(`ReadKey()`/`FlushKeys()`, INKEY$ strings from `BrowserKeyboard`) and the Web Audio tones (`RequestTone`). A page awaits `screen.Ready`, then calls
+`PresentGraphics(PCCanvas)` or `PresentText(Canvas)`:
+
+1. `Screen9.RgbaFrame` expands the visible page (the presented one with `ManualPresent`) into a reusable RGBA buffer, with no allocation per frame;
+   for text cells it rasterizes with the VGA 8x16 font and the 16 CGA colours, like `PngFrame.Encode(Canvas)`.
+2. `PixelBlit` (`[JSImport]` over `wwwroot/pixelBlit.js`) copies the buffer into the canvas `ImageData` and calls `putImageData`. One canvas per id, so several screens can share a page.
+
+There is no cap and no queue: a frame is drawn when the game presents it. A `byte[]` is passed to JavaScript (one 256 KB copy for a 640×350 frame, negligible);
+`Span<byte>` as `MemoryView` was tried first and fails in this runtime with `Assert failed: Expected function Uint8Array`.
+
+### No thread to sleep on: async games
+
+The browser runs .NET on a single thread: a `Thread.Sleep` or a blocking game loop would freeze painting and keys. The games therefore have an async entry point:
+
+- `GorillasGame.RunAsync()` and `RallyXGame.RunAsync()` await `host.Delay` (a `Func<TimeSpan, ValueTask>`); Gorillas also awaits `host.ToneAsync` for a tone that paces the game.
+  `host.Sleep` and `host.Tone` are now optional (default `Thread.Sleep` / no sound).
+- The old `Run()` is `RunAsync().AsTask().GetAwaiter().GetResult()`. With no `Delay` every wait completes synchronously, so the desktop window (`Gorillas.cs`, `RallyX.cs`), the
+  tests and `gorillas.csx` keep working unchanged. `gorillas.csx` is regenerated from `GorillasCore.cs` (a test checks that it carries the game text verbatim).
+- In the browser `GameClock.Delay` awaits `Task.Delay`, and for a zero or negative wait it awaits `Task.Yield()`: a game that is behind schedule must still let the browser paint and read keys.
+  `GameClock.PlayBackground` plays `PLAY "MB…"` tones one after the other without stopping the game.
+- `QBasicEngine` was already async: INKEY$ polls and TIMER waits `await options.Delay`. `BasicWasm` measures the empty-loop speed once on the user's machine (about half a second, after the first paint)
+  and sets `TimerWaitScale`, the same calibration the server does (`QBasicRunPolicy.CalibratedTimerWaitScale`, which lives in `QBSharp.Cli` and is not referenced from the browser).
+- Plasma and the demos have no loop of their own to convert: the component drives `Step()` from `requestAnimationFrame` (`PixelBlit.NextFrame`) or a 33 ms delay.
+
+### AOT: required for speed
+
+.NET in WebAssembly interprets IL unless it is ahead-of-time compiled. Plasma, headless Edge, same machine:
+
+| Build | `Step()` | fps |
+|---|---|---|
+| Blazor Server (PNG over SignalR) | n/a | ~5 |
+| WebAssembly, interpreted (`dotnet run`/`build`) | 28 ms (+10 ms to expand the frame) | ~22 |
+| WebAssembly, AOT (`dotnet publish`) | 1.1 ms (+0.2 ms) | 60 |
+
+Drawing on the canvas costs about 0.2 ms either way. Rally-X holds its 30 frames a second with AOT; Gorillas (C# and `.bas`) play normally.
+`RunAOTCompilation` is set in the client project and takes effect only on `publish` (about 3½ minutes, it compiles the whole runtime); it needs the workload:
+
+```powershell
+dotnet workload install wasm-tools
+dotnet publish src/Screen9.Web -c Release -o out
+dotnet out/Screen9.Web.dll --urls http://localhost:5000     # or deploy the folder
+```
+
+In development (`dotnet run`) the games work but run interpreted: use the publish to judge speed. The published `wwwroot` is about 28 MB on disk
+(the runtime and the assemblies; brotli-compressed on the wire, not measured on a real network): the first visit to a game page downloads it, later visits use the cache.
+
+### Server pages: frame rate
+
+The pages that stay on the server send an indexed PNG per frame with a ~30 Hz cap (`PixelDisplay.MinFrameIntervalMs`, 33 ms; it had been lowered to 200 ms and was put back).
+With one draw in flight and the latest frame winning, the rate follows the round trip by itself. The C# script game reached about 20 fps on localhost.
+Sending raw indices plus palette instead of the PNG was measured and rejected: encoding costs 2–7 ms per frame on a worst-case frame of random lines (mode 9: 5.4 ms, 89 KB;
+mode 12: 6.6 ms, 118 KB; mode 13: 2.3 ms, 39 KB; real game frames compress far better), while raw frames would be 224 KB, 307 KB and 64 KB: more bytes on the wire
+for a small CPU saving. The limit there is the round trip, not the encoder.
+
+The console has nothing to gain from the same change: `AnsiFrameRenderer` already reads the raw indices and the palette of the `PCCanvas` (`VisiblePixels`, `VisiblePalette`)
+and writes only the cells that changed, with no encoding step in between. The raw model is the engine's own; PNG exists only for the one transport that needs a file format.
+
+### How it was checked, and what is not
+
+Verified with Edge headless (software rendering) driven over the DevTools protocol on the published (AOT) site: Plasma, Rally-X (title, a match, steering keys, ~30 canvas draws a second),
+Gorillas C# and Gorillas `.bas` (intro, names, a shot), with screenshots and frame counters. Automated tests: `Screen9.Tests`, `RallyX.Tests`, `Screen9.Web.Tests`
+(including `gorillas.csx` against `GorillasCore`) pass; `QBSharp.Tests` has four failures about ANSI output of the redirected CLI that do not touch this code.
+**Not verified**: a real browser with a GPU, sound (Web Audio needs a gesture and was not audible in headless), touch devices, a real network (download size and first-load time),
+and navigating away from a game page mid-run (the components cancel their token in `Dispose`, but this was not exercised).
+
+### Pitfalls met while doing it
+
+- `JSImport`/`JSHost` need `AllowUnsafeBlocks`, and raise CA1416 (browser-only API) in a project that is also read by the server: the client project sets `NoWarn CA1416` rather than marking the whole assembly,
+  which would flag the server's own use of `BrowserKeyEvent`.
+- The Blazor Web App extensions (`AddInteractiveWebAssemblyComponents`…) live in the `…WebAssembly.Server` package, even though the server does not host WebAssembly itself.
+- A running `Screen9.Web` locks `Screen9.Web.Client.dll`: stop it before building.
+
 ## Screens and comments
 
 Every screen has a **Save PNG** button under it: it downloads the frame as it is on the screen (native pixels, for example 640×350 in mode 9) so it can
@@ -105,10 +214,7 @@ before exposing the site a sandbox must be chosen, or only the fixed code left.
 - **No mouse** in the web TUI editor: both stay fully usable from the keyboard
   (F10 opens the menu in the TUI, the arrows navigate it).
 - **Fixed 80×25 size** for the TUI screen (no resizing when the browser is resized).
-- **Not verified**: the whole interactive cycle (frame drawing, keyboard, audio) needs a real browser;
-  what was verified here is the build, the automated tests (mappers, `PngFrame`, `GorillasCore` parity via
-  `--selftest`/`--smoke`) and that every page answers HTTP 200 without exceptions in the initial render — not
-  a real interactive session.
+- **Not verified**: a real browser with a GPU, audio, touch and a real network; see "How it was checked, and what is not" above for what was exercised in headless Edge.
 
 ## Publishing: static files arrived empty (fixed)
 

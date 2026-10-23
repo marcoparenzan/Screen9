@@ -18,7 +18,8 @@ dotnet run -c Release samples/csharp/RallyX/RallyX.cs -- --smoke          # demo
 dotnet test src/RallyX.Tests
 ```
 
-On the web site: page `/rally-x` (`dotnet run --project src/Screen9.Web`).
+On the web site: page `/rally-x` (`dotnet run --project src/Screen9.Web`). There the game runs in the browser as WebAssembly (`RallyXGame.RunAsync`, awaiting the host's `Delay`
+rather than sleeping); `Run()` is the same game for a window. For 30 fps use a published (AOT) build: see [docs/web](../../../docs/web/README.md).
 
 | Key | Action |
 |---|---|
