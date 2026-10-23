@@ -11,8 +11,8 @@
     <!-- Games run in the browser, in-process: no SignalR hop per frame. The server keeps the interpreters/editor. -->
     <BlazorWebAssemblyLoadAllGlobalizationData>false</BlazorWebAssemblyLoadAllGlobalizationData>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <!-- IL interpreter: ~28 ms per Plasma step. AOT (publish only) compiles to native WASM; needs the wasm-tools workload. -->
-    <RunAOTCompilation>true</RunAOTCompilation>
+    <!-- IL interpreter: ~28 ms per Plasma step. AOT (publish, Release only: a Debug build stays debuggable) compiles to native WASM; needs the wasm-tools workload. -->
+    <RunAOTCompilation Condition="'$(Configuration)' == 'Release'">true</RunAOTCompilation>
   </PropertyGroup>
 
   <ItemGroup>
