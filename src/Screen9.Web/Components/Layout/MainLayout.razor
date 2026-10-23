@@ -8,7 +8,8 @@
 }
 
 <div class="flex min-h-screen flex-col">
-    <header class="flex items-center gap-6 border-b border-pc-darkgray bg-pc-blue px-4 py-2 text-pc-white">
+    @* Fixed while the page scrolls (h-14 = 3.5rem: the side navigation below sticks right under it). z-30 keeps its drop-downs over the page. *@
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-6 border-b border-pc-darkgray bg-pc-blue px-4 text-pc-white">
         @* The first section (Screen9: Home, Mode 9 history, Library) hangs from the logo; the others from their titles. *@
         @foreach (var (section, index) in SiteNavigation.Sections.Select((s, i) => (s, i)))
         {
@@ -38,7 +39,8 @@
     <div class="flex flex-1 flex-col md:flex-row">
         @if (current is { } here)
         {
-            <nav aria-label="@here.Section.Title" class="shrink-0 border-b border-pc-darkgray bg-pc-black/40 px-3 py-3 md:w-60 md:border-b-0 md:border-r">
+            @* On wide screens the navigation stays in view under the header and scrolls on its own if it is taller than the window. *@
+            <nav aria-label="@here.Section.Title" class="shrink-0 border-b border-pc-darkgray bg-pc-black/40 px-3 py-3 md:sticky md:top-14 md:h-[calc(100vh-3.5rem)] md:w-60 md:self-start md:overflow-y-auto md:border-b-0 md:border-r">
                 <div class="mb-2 px-3 text-xs font-bold uppercase tracking-wide text-pc-brightblue">@here.Section.Title</div>
                 <ul class="flex flex-row flex-wrap gap-1 md:flex-col">
                     @foreach (var item in here.Section.Items)
